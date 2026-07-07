@@ -10,6 +10,11 @@ accepts or rejects in Google Docs before sending the draft on for strategic sign
 Full detail: `Verbatim PRD.docx` and `Marketing Role Research Notes_ Automated Copy
 Review.docx`.
 
+**Before starting any work, read `TODO.md`.** It has the current sprint's day-by-day
+plan and, critically, which files/components are Karl's vs. Christina's to touch —
+staying inside that split is what keeps the two of them from colliding on the same
+files.
+
 ## Stack & tooling
 
 Python 3.12, fully managed by `uv` (no manual venv/pip). Build backend: hatchling.
@@ -39,6 +44,10 @@ Quality gates: ruff (strict lint + format), mypy (strict), pytest/pytest-cov
   config) is done; GitHub-side setup (repo creation, branch protection, CI/CD
   workflows, CODEOWNERS, issue/PR templates) is still outstanding — check there before
   assuming any of it exists.
+- `TODO.md` — the live sprint plan: current deadline, the day-by-day Karl/Christina
+  work split, file/component ownership, and what's been deliberately deferred. Check
+  it before picking up new work so you don't duplicate or collide with the other
+  person's in-flight work.
 
 ## Process norms
 

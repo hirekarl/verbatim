@@ -8,6 +8,7 @@ and banned words — as inline comments and suggested edits directly in the docu
 
 ## Table of contents
 
+- [Current sprint](#current-sprint)
 - [Prerequisites](#prerequisites)
 - [macOS setup](#macos-setup)
 - [Windows setup](#windows-setup)
@@ -17,6 +18,12 @@ and banned words — as inline comments and suggested edits directly in the docu
 - [Project structure](#project-structure)
 - [Versioning](#versioning)
 - [License](#license)
+
+## Current sprint
+
+See [`TODO.md`](TODO.md) for the active sprint plan — the current deadline, the
+day-by-day work split between Karl and Christina, and which files/components each of
+them (and their coding agents) should be working in.
 
 ## Prerequisites
 
