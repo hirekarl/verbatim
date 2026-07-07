@@ -76,6 +76,27 @@ class TestBrandGuidelinesEvaluator:
         ]
         assert len(ampersand_violations) == 0
 
+    def test_ampersand_allowed_in_brand_name_with_apostrophe(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that apostrophes don't break brand-name tokenization for ampersands."""
+        test_cases = [
+            "We love Ben & Jerry's ice cream.",
+            "Try the new M&M's promotion.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            ampersand_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "ampersand" in v.message.lower()
+            ]
+            assert len(ampersand_violations) == 0, (
+                f"False positive: apostrophe brand name flagged in '{text}'"
+            )
+
     def test_ampersand_flags_title_case_non_brands(
         self, evaluator: BrandGuidelinesEvaluator
     ) -> None:

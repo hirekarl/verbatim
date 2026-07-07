@@ -164,6 +164,11 @@ class BrandGuidelinesEvaluator:
         Ampersands should only be used in company/brand names.
         Uses an allowlist of known brand names for accurate detection.
 
+        Note: This is a known limitation of the allowlist approach - any real
+        brand name not present in `allowed_brand_names` (e.g. "Simon &
+        Schuster") will still be flagged. A general brand-name detector is
+        out of scope here.
+
         Args:
             text: The text to check
 
@@ -194,8 +199,12 @@ class BrandGuidelinesEvaluator:
 
             # Get the words immediately before and after the &
             # Use word boundary regex to extract words without punctuation
-            words_before_match = re.findall(r"\b\w+\b", before_text)
-            words_after_match = re.findall(r"\b\w+\b", after_text)
+            words_before_match = re.findall(
+                r"[A-Za-z0-9]+(?:'[A-Za-z0-9]+)*", before_text
+            )
+            words_after_match = re.findall(
+                r"[A-Za-z0-9]+(?:'[A-Za-z0-9]+)*", after_text
+            )
 
             # Build potential brand name phrases of varying lengths
             # Check 1-word before/after (e.g., "AT&T"), 2-words (e.g., "Ben & Jerry's")
