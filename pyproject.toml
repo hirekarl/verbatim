@@ -9,6 +9,13 @@ authors = [
     { name = "Karl Johnson" },
     { name = "Christina Ruiz" },
 ]
+dependencies = [
+    "google-api-python-client>=2.198.0",
+    "google-auth-httplib2>=0.4.0",
+    "google-auth-oauthlib>=1.4.0",
+    "openai>=2.44.0",
+    "python-dotenv>=1.2.2",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -27,6 +34,7 @@ dev = [
     "commitizen",
     "mdformat",
     "mdformat-gfm",
+    "pytest-mock>=3.15.1",
 ]
 
 [tool.ruff]
@@ -52,6 +60,15 @@ warn_redundant_casts = true
 no_implicit_optional = true
 show_error_codes = true
 files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = [
+    "googleapiclient.*",
+    "google_auth_oauthlib.*",
+    "google.oauth2.*",
+    "google.auth.*",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

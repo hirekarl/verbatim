@@ -233,3 +233,9 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,macos,python
+
+### Verbatim: Google OAuth credentials & cached tokens (never commit) ###
+credentials.json
+client_secret*.json
+token.json
+token.pickle
