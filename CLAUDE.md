@@ -16,9 +16,8 @@ Python 3.12, fully managed by `uv` (no manual venv/pip). Build backend: hatchlin
 
 ## Repo layout
 
-- `src/verbatim/` — the installable package (currently just version plumbing).
+- `src/verbatim/` — the installable package. Includes `evaluator.py` (`BrandGuidelinesEvaluator`, checks marketing copy against brand rules) and `brand_guidelines.py` / `data/brand_guidelines.json` (brand voice/style rules loader and fixture). Both are linted/type-checked like the rest of `src/` — no `mypy`/`ruff` exclusions remain for them.
 - `tests/` — pytest suite.
-- `brand_guidelines.json` / `brand_guidelines.py` — brand voice/style rules fixture and loader. These intentionally stay at the repo root for now, not `src/verbatim/`; that migration is deliberately deferred (see BOOTSTRAPPING.md's Follow-up section). Because of that, both are excluded from `mypy` (`files = ["src", "tests"]` in `pyproject.toml`) and `ruff` (`extend-exclude` in `pyproject.toml`) — don't be surprised that lint/type-check gates don't touch them, and don't pre-emptively move or reformat them as part of unrelated work.
 - `BOOTSTRAPPING.md` — the full scaffolding runbook and rationale (branch protection, CI/CD, versioning, governance). Local tooling (this package, pre-commit, ruff/mypy config) is done; GitHub-side setup (repo creation, branch protection, CI/CD workflows, CODEOWNERS, issue/PR templates) is still outstanding — check there before assuming any of it exists.
 - `TODO.md` — the live sprint plan: current deadline, the day-by-day Karl/Christina work split, file/component ownership, and what's been deliberately deferred. Check it before picking up new work so you don't duplicate or collide with the other person's in-flight work.
 
