@@ -103,11 +103,13 @@ verbatim/
 │       └── ci.yml          # lint, type-check, and test on every PR and push to main
 ├── src/verbatim/           # the installable package
 │   ├── __init__.py
-│   └── py.typed
+│   ├── py.typed
+│   ├── evaluator.py        # BrandGuidelinesEvaluator: checks text against brand rules
+│   ├── brand_guidelines.py # loader for brand_guidelines.json
+│   └── data/
+│       └── brand_guidelines.json  # brand voice/style rules fixture
 ├── tests/                  # pytest suite
 ├── docs/                   # PRD and research reference docs (.docx)
-├── brand_guidelines.json   # brand voice/style rules fixture
-├── brand_guidelines.py     # loader for brand_guidelines.json
 ├── BOOTSTRAPPING.md        # scaffolding rationale and remaining setup work
 ├── CLAUDE.md               # project context for AI coding agents
 ├── LICENSE                 # MIT
