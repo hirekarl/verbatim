@@ -461,10 +461,16 @@ class BrandGuidelinesEvaluator:
         - Twitter: 280 character limit
         - Facebook: 1-2 short sentences preferred
         - Instagram: 1 sentence or short phrase
+        - Email: subject line (first line of text) should be descriptive,
+          sentence case, and not at risk of truncation. This is a
+          deliberately simple first pass - it doesn't check Title Case,
+          since that would false-positive on any subject with capitalized
+          proper nouns/products.
 
         Args:
             text: The text to check
-            channel: The target channel (e.g., "twitter", "facebook", "instagram")
+            channel: The target channel (e.g., "twitter", "facebook",
+                "instagram", "email")
 
         Returns:
             List of violations for channel constraint issues
@@ -515,5 +521,60 @@ class BrandGuidelinesEvaluator:
                         ),
                     )
                 )
+
+        # Email: subject line (first line) should be descriptive, sentence
+        # case, and not at risk of truncation
+        elif channel_lower == "email":
+            stripped = text.strip()
+            subject_line = stripped.splitlines()[0].strip() if stripped else ""
+
+            if subject_line:
+                if subject_line.isupper():
+                    violations.append(
+                        Violation(
+                            category="channel_constraints",
+                            severity="warning",
+                            message=(
+                                "Email subject lines should use sentence case, "
+                                "not all caps"
+                            ),
+                            matched_text=subject_line,
+                            suggestion="Rewrite in sentence case",
+                        )
+                    )
+
+                generic_subjects = {"newsletter", "update", "news", "hello", "info"}
+                if (
+                    len(subject_line) < 15
+                    or subject_line.strip(".!?").lower() in generic_subjects
+                ):
+                    violations.append(
+                        Violation(
+                            category="channel_constraints",
+                            severity="warning",
+                            message=(
+                                "Email subject lines should be descriptive, not generic"
+                            ),
+                            matched_text=subject_line,
+                            suggestion="Front-load the most important, specific words",
+                        )
+                    )
+
+                if len(subject_line) > 60 and subject_line[-1].isalnum():
+                    violations.append(
+                        Violation(
+                            category="channel_constraints",
+                            severity="warning",
+                            message=(
+                                "Email subject line may get truncated; "
+                                "put important words first"
+                            ),
+                            matched_text=subject_line,
+                            suggestion=(
+                                "Shorten to under ~60 characters or "
+                                "front-load key words"
+                            ),
+                        )
+                    )
 
         return violations

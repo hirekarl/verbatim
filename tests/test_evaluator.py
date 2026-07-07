@@ -606,3 +606,51 @@ class TestBrandGuidelinesEvaluator:
             v for v in violations if v.category == "channel_constraints"
         ]
         assert len(channel_violations) == 0
+
+    def test_email_all_caps_subject_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test detection of all-caps email subject lines."""
+        text = "HUGE SALE THIS WEEK ONLY"
+        violations = evaluator.evaluate(text, channel="email")
+
+        channel_violations = [
+            v for v in violations if v.category == "channel_constraints"
+        ]
+        assert any("sentence case" in v.message.lower() for v in channel_violations)
+
+    def test_email_generic_subject_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test detection of generic/non-descriptive email subject lines."""
+        text = "Newsletter"
+        violations = evaluator.evaluate(text, channel="email")
+
+        channel_violations = [
+            v for v in violations if v.category == "channel_constraints"
+        ]
+        assert any("descriptive" in v.message.lower() for v in channel_violations)
+
+    def test_email_truncated_subject_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test detection of email subject lines likely to get truncated."""
+        text = "Check out all of our brand new product features and updates this month"
+        violations = evaluator.evaluate(text, channel="email")
+
+        channel_violations = [
+            v for v in violations if v.category == "channel_constraints"
+        ]
+        assert any("truncat" in v.message.lower() for v in channel_violations)
+
+    def test_email_descriptive_subject_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that a good email subject line produces no violations."""
+        text = "Your Q3 report is ready to download."
+        violations = evaluator.evaluate(text, channel="email")
+
+        channel_violations = [
+            v for v in violations if v.category == "channel_constraints"
+        ]
+        assert len(channel_violations) == 0
