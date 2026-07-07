@@ -11,13 +11,13 @@ class BrandGuidelines:
     def load(self) -> None:
         if not os.path.exists(self.filepath):
             raise FileNotFoundError(f"Brand guidelines fixture not found at: {self.filepath}")
-        
+
         with open(self.filepath, "r", encoding="utf-8") as f:
             try:
                 self.data = json.load(f)
             except json.JSONDecodeError as e:
                 raise ValueError(f"Invalid JSON in brand guidelines file: {e}")
-        
+
         # Verify basic expected schema
         expected_keys = ["metadata", "voice_and_tone", "rules"]
         for key in expected_keys:
@@ -30,12 +30,12 @@ class BrandGuidelines:
         lines = ["### Voice Principles:"]
         for name, desc in vt.get("voice_principles", {}).items():
             lines.append(f"- **{name.capitalize()}**: {desc}")
-            
+
         lines.append("\n### Tone Guidance:")
         for name, desc in vt.get("tone_guidance", {}).items():
             clean_name = name.replace("_", " ").capitalize()
             lines.append(f"- **{clean_name}**: {desc}")
-            
+
         return "\n".join(lines)
 
     def get_rules_for_category(self, category: str) -> List[str]:
@@ -67,9 +67,9 @@ class BrandGuidelines:
         prompt.append("=== BRAND VOICE & STYLE GUIDELINES ===")
         prompt.append(self.get_voice_and_tone_summary())
         prompt.append("")
-        
+
         prompt.append("### Core Audit Rules:")
-        
+
         # Add rules by category
         categories = ["tone_drift", "information_hierarchy", "cta_cadence", "readability", "formatting_and_style"]
         for cat in categories:
@@ -79,7 +79,7 @@ class BrandGuidelines:
                 prompt.append(f"\n* {cat_name}:")
                 for rule in rules:
                     prompt.append(f"  - {rule}")
-                    
+
         # Add channel constraints if target_channel is provided
         if target_channel:
             cc_rules = self.get_rules_for_category("channel_constraints")
@@ -88,18 +88,18 @@ class BrandGuidelines:
                 prompt.append("\n* CHANNEL-SPECIFIC CONSTRAINTS:")
                 for rule in matching_rules:
                     prompt.append(f"  - {rule}")
-                    
+
         # Add Banned Words & Spellings
         banned = self.get_banned_words()
         if banned:
             prompt.append(f"\n* BANNED WORDS (Do not use under any circumstances): {', '.join(banned)}")
-            
+
         spellings = self.get_standardized_spellings()
         if spellings:
             prompt.append("\n* STANDARDIZED SPELLINGS & USAGE:")
             for term, rule in spellings.items():
                 prompt.append(f"  - **{term}**: {rule}")
-                
+
         prompt.append("======================================")
         return "\n".join(prompt)
 

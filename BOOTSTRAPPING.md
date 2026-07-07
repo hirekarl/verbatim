@@ -22,7 +22,7 @@ the first commit message matters for the first automatic release).
 ## Decisions this plan assumes (already made, don't re-litigate)
 
 | Area | Decision |
-|---|---|
+| --- | --- |
 | Python version | 3.12, fully managed by **uv**; `uv.lock` is committed |
 | Repo visibility/license | Public GitHub repo, **MIT** license |
 | Branch protection | 1 required approving review + required passing CI on `main`; admin (Karl) can bypass with `--admin` |
@@ -35,7 +35,7 @@ the first commit message matters for the first automatic release).
 
 ## Target repo tree
 
-```
+```text
 verbatim/
 ├── .editorconfig
 ├── .gitattributes
@@ -77,6 +77,7 @@ verbatim/
 ## File-by-file specification
 
 ### `pyproject.toml`
+
 Single source of truth for project metadata and all tool configuration.
 
 - `[project]`: `name = "verbatim"`, `version = "0.0.0"` (deliberately starts at zero —
@@ -105,20 +106,24 @@ Single source of truth for project metadata and all tool configuration.
   (keeps `feat:` bumping the minor version while pre-1.0, avoiding a premature `1.0.0`).
 
 ### `src/verbatim/__init__.py`
+
 Single-sources `__version__` via
 `from importlib.metadata import version; __version__ = version("verbatim")` — avoids a
 second hardcoded version string that commitizen would otherwise need a `version_files`
 entry to keep in sync with `pyproject.toml`.
 
 ### `src/verbatim/py.typed`
+
 Empty file. PEP 561 marker declaring the package ships inline types.
 
 ### `tests/test_version.py`
+
 Asserts `verbatim.__version__` is a non-empty string. This seeds the 90% coverage gate
 meaningfully from the very first CI run — an empty `src/` tree would otherwise make
 `pytest-cov` error ("no data to report") or trivially pass on zero statements.
 
 ### `.pre-commit-config.yaml`
+
 - Top-level `default_install_hook_types: [pre-commit, commit-msg]` so a single
   `uv run pre-commit install` wires both hook stages — important so a non-professional
   collaborator doesn't need to remember extra flags.
@@ -136,19 +141,24 @@ meaningfully from the very first CI run — an empty `src/` tree would otherwise
   patterns relevant to this project's eventual Google Docs API integration.
 
 ### `.editorconfig`
+
 `root = true`; `[*]` charset utf-8, `end_of_line = lf`, `insert_final_newline = true`,
 `trim_trailing_whitespace = true`; `[*.py]` indent_style space, indent_size 4;
 `[*.{yml,yaml,json,md}]` indent_size 2.
 
 ### `.gitattributes`
+
 `* text=auto eol=lf`; explicit `*.docx binary`, `*.png binary`, `*.jpg binary`,
 `*.pdf binary`; `uv.lock text eol=lf`.
 
 ### `LICENSE`
+
 Standard MIT license text, `Copyright (c) 2026 Karl Johnson`.
 
 ### `README.md`
+
 Written for Christina (non-professional developer). Sections, in order:
+
 1. Title + badges (CI status, MIT license — no coverage badge, see "Additional
    recommendations" below).
 2. One-paragraph product description.
@@ -169,6 +179,7 @@ Written for Christina (non-professional developer). Sections, in order:
 13. Security section, links `SECURITY.md`.
 
 ### `CONTRIBUTING.md`
+
 - Explicit TDD statement: write a failing test before implementation code.
 - Conventional Commits format + examples (`feat:`, `fix:`, `chore:`, `docs:`).
 - Branch naming convention.
@@ -179,14 +190,17 @@ Written for Christina (non-professional developer). Sections, in order:
 - Link to `CODE_OF_CONDUCT.md`.
 
 ### `SECURITY.md`
+
 Recommends enabling GitHub's built-in **Private Vulnerability Reporting**
 (Settings → Security) as the primary channel, with `[email redacted]` as
 email fallback. Notes only the latest release is supported pre-1.0.
 
 ### `CODE_OF_CONDUCT.md`
+
 Contributor Covenant v2.1, contact email set to Karl's.
 
 ### `.github/CODEOWNERS`
+
 `* @<karl-gh-username> @<christina-gh-username>` — **replace the placeholders with
 real GitHub handles before the first push.** Combined with
 `require_code_owner_reviews=true` in branch protection (Phase 4), this makes the
@@ -194,6 +208,7 @@ real GitHub handles before the first push.** Combined with
 listed as owners for `*`, either non-author can satisfy the requirement.
 
 ### `.github/dependabot.yml`
+
 - `package-ecosystem: "uv"` for `pyproject.toml`/`uv.lock`, weekly schedule, grouped
   minor/patch updates.
 - Second entry: `package-ecosystem: "github-actions"` for workflow action pins, weekly.
@@ -202,14 +217,17 @@ listed as owners for `*`, either non-author can satisfy the requirement.
 (Chosen over Renovate: native to GitHub, no extra account needed.)
 
 ### `.github/pull_request_template.md`
+
 Checklist: tests added/passing, `ruff`/`mypy` clean locally, PR title follows
 Conventional Commits, linked issue if applicable.
 
 ### `.github/ISSUE_TEMPLATE/`
+
 `bug_report.yml` and `feature_request.yml` as structured YAML forms; `config.yml` sets
 `blank_issues_enabled: false` with a contact link to email, keeping intake structured.
 
 ### `.github/workflows/ci.yml`
+
 - `name: CI`; triggers on `pull_request` and `push: branches: [main]`.
 - Job `Quality Gates`: `astral-sh/setup-uv@v5` (`enable-cache: true`),
   `uv python install 3.12`, `uv sync`, then `uv run ruff check .`,
@@ -219,6 +237,7 @@ Conventional Commits, linked issue if applicable.
   squash-merge decision in Phase 4.
 
 ### `.github/workflows/release.yml`
+
 - Triggers on `workflow_run` for the CI workflow, filtered to
   `github.event.workflow_run.conclusion == 'success'` and `head_branch == 'main'` —
   guarantees a release only happens after CI genuinely passed on `main`.
