@@ -47,6 +47,7 @@ class BrandGuidelinesEvaluator:
 
         # Check banned words
         violations.extend(self._check_banned_words(text))
+        violations.extend(self._check_standardized_spellings(text))
 
         # Check formatting and style rules
         violations.extend(self._check_ampersands(text))
@@ -90,6 +91,63 @@ class BrandGuidelinesEvaluator:
                         message=f"Banned word found: '{word}'",
                         matched_text=match.group(),
                         suggestion=None,
+                    )
+                )
+
+        return violations
+
+    def _check_standardized_spellings(self, text: str) -> list[Violation]:
+        """Check for non-standard spellings.
+
+        Brand guidelines specify standardized spellings for common terms
+        (email, website, WiFi, OK, etc.).
+
+        Args:
+            text: The text to check
+
+        Returns:
+            List of violations for non-standard spellings
+        """
+        violations: list[Violation] = []
+
+        # Define patterns for non-standard spellings
+        # Format: (wrong_pattern, correct_form, explanation)
+        spelling_patterns = [
+            (r"\be-mail\b", "email", "Never hyphenate 'email'"),
+            (r"\bE-mail\b", "Email", "Never hyphenate 'email'"),
+            (r"\bWeb\s+site\b", "website", "Write as one word: 'website'"),
+            (r"\bhome\s+page\b", "homepage", "Write as one word: 'homepage'"),
+            (r"\bco-worker\b", "coworker", "Write as one word: 'coworker'"),
+            (r"\bco\s+worker\b", "coworker", "Write as one word: 'coworker'"),
+            # Capitalization errors (mid-sentence)
+            (
+                r"(?<=[a-z])\s+Internet\b",
+                "internet",
+                "Don't capitalize 'internet' mid-sentence",
+            ),
+            (
+                r"(?<=[a-z])\s+Online\b",
+                "online",
+                "Don't capitalize 'online' mid-sentence",
+            ),
+            # OK/ok variations
+            (r"\bok\b", "OK", "Always write as 'OK' (all caps)"),
+            (r"\bOk\b", "OK", "Always write as 'OK' (all caps)"),
+            # WiFi variations
+            (r"\bwifi\b", "WiFi", "Always write as 'WiFi' (capital W and F)"),
+            (r"\bWifi\b", "WiFi", "Always write as 'WiFi' (capital W and F)"),
+        ]
+
+        for pattern, correct_form, explanation in spelling_patterns:
+            matches = re.finditer(pattern, text)
+            for match in matches:
+                violations.append(
+                    Violation(
+                        category="banned_words_and_competitors",
+                        severity="warning",
+                        message=f"Non-standard spelling: {explanation}",
+                        matched_text=match.group().strip(),
+                        suggestion=correct_form,
                     )
                 )
 

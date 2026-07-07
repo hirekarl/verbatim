@@ -336,3 +336,50 @@ class TestBrandGuidelinesEvaluator:
             if v.category == "formatting_and_style" and "link" in v.message.lower()
         ]
         assert len(link_violations) == 0
+
+    def test_detect_non_standard_spellings(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test detection of non-standard spellings."""
+        test_cases = [
+            ("Send us an e-mail", "e-mail", "email"),
+            ("Check our Web site", "Web site", "website"),
+            ("The Internet is great", "Internet", "internet"),
+            ("Buy Online today", "Online", "online"),
+            ("Our co-worker helps", "co-worker", "coworker"),
+            ("Visit the home page", "home page", "homepage"),
+            ("Click ok to continue", "ok", "OK"),
+            ("Connect to wifi", "wifi", "WiFi"),
+        ]
+
+        for text, wrong_form, correct_form in test_cases:
+            violations = evaluator.evaluate(text)
+            spelling_violations = [
+                v
+                for v in violations
+                if v.category == "banned_words_and_competitors"
+                and "spelling" in v.message.lower()
+            ]
+            assert len(spelling_violations) > 0, (
+                f"Expected to detect non-standard spelling '{wrong_form}' in {text!r}"
+            )
+            # Check that suggestion contains correct form
+            violation = spelling_violations[0]
+            assert (
+                violation.suggestion and correct_form in violation.suggestion
+            ) or correct_form in violation.message
+
+    def test_standard_spellings_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that standard spellings produce no violations."""
+        text = "Send us an email about our website. Connect to WiFi and click OK."
+        violations = evaluator.evaluate(text)
+
+        spelling_violations = [
+            v
+            for v in violations
+            if v.category == "banned_words_and_competitors"
+            and "spelling" in v.message.lower()
+        ]
+        assert len(spelling_violations) == 0
