@@ -1,0 +1,154 @@
+{
+  "metadata": {
+    "name": "Mailchimp Content Style Guide Synthesis (Comprehensive)",
+    "source": "https://styleguide.mailchimp.com/",
+    "last_updated": "2026-07-06",
+    "version": "1.1.0"
+  },
+  "voice_and_tone": {
+    "voice_principles": {
+      "plainspoken": "Value clarity above all. Strip away hyperbolic language, over-promises, fluffy metaphors, and cheap plays to emotion. Businesses come to work, so avoid distractions.",
+      "genuine": "Be familiar, warm, and accessible. Relate to the customer's challenges and passions and speak to them like a supportive partner.",
+      "translators": "Demystify complex jargon and B2B-speak. Make what is difficult look easy and actually educate the reader.",
+      "dry_humor": "Humor should be straight-faced, subtle, and eccentric. Play with language, winking instead of shouting. Never be condescending or exclusive—bring customers in on the joke."
+    },
+    "tone_guidance": {
+      "default_tone": "Usually informal, but clarity is always more important than entertainment.",
+      "emotional_awareness": "Consider the reader's state of mind (e.g., relieved after a campaign, confused when seeking help) and adjust the tone accordingly.",
+      "forced_humor_avoidance": "Never force a joke. If humor doesn't come naturally or feel appropriate, keep a straight face."
+    }
+  },
+  "rules": {
+    "tone_drift": {
+      "rules": [
+        "Ensure writing remains informal but clear and avoids stuffy B2B-speak or corporate jargon.",
+        "Ensure humor remains dry and subtle; flag any forced, farcical, or shouting jokes.",
+        "Verify that content does not write in Freddie's voice (Freddie does not speak, he only smiles, winks, or high-fives).",
+        "Avoid referring to an audience or contact list as 'it'; always use 'they/them' because audiences are made up of real people.",
+        "Avoid ageist or patronizing language. Do not refer to people using age-related descriptors like 'young', 'old', or 'elderly'."
+      ]
+    },
+    "information_hierarchy": {
+      "rules": [
+        "Lead with the main point or most important content first in sentences, paragraphs, sections, and pages.",
+        "Group related ideas together logically.",
+        "Use clear, nested, and consecutive headings (H1 for page titles, H2s for top-level, H3s for sub-sections). Never skip header levels for styling.",
+        "Organize long copy into structured lists instead of plain text with manual line breaks."
+      ]
+    },
+    "cta_cadence": {
+      "rules": [
+        "Avoid placing Call-to-Actions prematurely before establishing value or context.",
+        "Ensure CTA frequency matches the channel (e.g., single focused CTA for newsletters, strategic positioning for blogs).",
+        "Limit the number of links in mobile-first layouts to focus the CTA and prevent errant taps on small screens."
+      ]
+    },
+    "readability": {
+      "rules": [
+        "Use active voice. Avoid passive voice (flag sentences using 'was' or 'by' acting as passive indicators, e.g., 'The account was logged into by Marti' should be 'Marti logged into the account').",
+        "Be concise: Use short words and sentences. Cut the fluff and unnecessary modifiers.",
+        "Write positively: Use positive language rather than negative language (look for words like 'can't', 'don't', etc. and rewrite, e.g., 'You can't get a donut if you don't stand in line' should be 'To get a donut, stand in line').",
+        "Write in plain English: Avoid industry slang and corporate buzzwords. Define technical terms immediately if they must be used.",
+        "Avoid disability-related idioms (e.g., 'lame', 'falling on deaf ears'). Use person-first or identity-first language as preferred by the subject.",
+        "Do not use 'suffer', 'victim', or 'handicapped' (except for 'handicapped parking').",
+        "Never assume or describe someone generally as 'mentally ill' or use medical diagnoses loosely."
+      ]
+    },
+    "formatting_and_style": {
+      "rules": [
+        "Use the Oxford comma (serial comma) in lists (e.g., 'A, B, and C' not 'A, B and C').",
+        "Use Title Case for page and blog post titles (no end punctuation unless a question).",
+        "Use sentence case for headings and subheadings (no end punctuation unless a question or multiple sentences).",
+        "Use sentence case for checkboxes, radio button fields, and form fields.",
+        "Use Title Case for form titles, menu names, and global/main navigation. Use sentence case for menu items and subnavigation.",
+        "Leave exactly a single space between sentences (never two spaces).",
+        "Avoid semicolons. Simplify sentences, use an em dash (—) without spaces, or start a new sentence instead.",
+        "Do not use ampersands (&) unless part of a company or brand name. (Note: Ampersands are allowed in button copy).",
+        "Use exclamation points sparingly, never more than one at a time, and never in failure messages or alerts.",
+        "Periods and commas go inside quotation marks. Question marks go inside quotes only if part of the quote.",
+        "Use singular 'they/them' if gender is unknown or irrelevant. Do not use 'one' as a pronoun.",
+        "Use gender-neutral terms instead of gendered ones (e.g., 'server' instead of 'waitress', 'businessperson' instead of 'businessman'). Do not call groups 'guys' or women 'girls'.",
+        "Always write company name as 'Mailchimp' (capital M, lowercase c). Do not use 'The Rocket Science Group' unless in legal documents.",
+        "Refer to Mailchimp as 'we', not 'it'. Refer to other companies as 'it', not 'they'.",
+        "Honor other companies' official capitalizations (e.g., YouTube, iPad, Yahoo!).",
+        "Capitalize Mailchimp pricing plans (Premium, Standard, Essentials, Free), but lowercase descriptive feature names (templates, mobile app).",
+        "Standardize dual heritage references without hyphens (e.g., 'Asian American', not 'Asian-American').",
+        "Standardize race capitalization: Capitalize 'Black' when referring to people in the African diaspora, but keep 'white' lowercase.",
+        "Links: Do not link preceding articles (e.g. 'Read the [automation guide]' not 'Read [the automation guide]'). Do not link punctuation. Avoid 'Click here'; link descriptive keywords instead.",
+        "Buttons: Button copy should always include verbs, be clear/concise, and use sentence case.",
+        "File extensions: Use all uppercase without a period (e.g. GIF, PDF, HTML, JPGs) for general references; lowercase filenames for specific files (e.g., 'slowclap.gif').",
+        "Numbers: Use numerals (e.g., 3, 12, 1st, 8th) unless the number begins a sentence or is part of a standard expression (e.g., 'first impression', 'third-party integration'). Use commas for numbers over 3 digits (1,000). Spell out fractions (two-thirds) and use % symbol for percentages. Dates: Spell out weekday and month. Time: Use numeral + space + am/pm (7 am, 7:30 pm); use en dash without spaces for ranges."
+      ]
+    },
+    "channel_constraints": {
+      "rules": [
+        "Twitter: Keep copy strictly within 280 characters. Shorter words like 'info' are fine, but do not use letter/number shortcuts (e.g., '4' for 'for', 'u' for 'you').",
+        "Facebook: Aim for 1-2 short sentences.",
+        "Instagram: Keep copy to 1 sentence or a short phrase; emoji are allowed.",
+        "Email Newsletters: Keep subject lines descriptive and written in sentence case. Tell—don't sell—what is inside. Avoid subject line truncation by putting important words first."
+      ]
+    },
+    "banned_words_and_competitors": {
+      "banned_words": [
+        "automagical",
+        "funnel",
+        "incentivize",
+        "leverage",
+        "disruption",
+        "thought leader",
+        "learnings",
+        "internets",
+        "interwebs",
+        "ninja",
+        "rockstar",
+        "wizard",
+        "unicorn",
+        "young",
+        "old",
+        "elderly",
+        "crushing it",
+        "killing it",
+        "crazy",
+        "insane",
+        "best-in-breed",
+        "rise and grind",
+        "activation",
+        "blacklist",
+        "whitelist",
+        "grandfathered",
+        "slave",
+        "master",
+        "lame",
+        "falling on deaf ears",
+        "handicapped",
+        "suffer",
+        "victim",
+        "homosexual",
+        "lifestyle",
+        "preference",
+        "gay marriage",
+        "same-sex marriage"
+      ],
+      "standardized_spellings": {
+        "email": "Never hyphenate, never capitalize unless starting a sentence (e.g., not e-mail, Email).",
+        "internet": "Never capitalize unless starting a sentence (e.g., not Internet).",
+        "online": "Never capitalize unless starting a sentence (e.g., not Online).",
+        "website": "Never capitalize unless starting a sentence (e.g., not Web site).",
+        "add-on": "Use hyphen for noun/adjective (e.g., 'an add-on tool'), no hyphen for verb ('add on').",
+        "back-end": "Use hyphen for adjective (e.g., 'back-end code'), no hyphen for noun ('the back end').",
+        "front-end": "Use hyphen for adjective (e.g., 'front-end interface'), no hyphen for noun ('the front end').",
+        "best-selling": "Use hyphen for adjective (e.g., 'best-selling author'), no hyphen for noun ('best seller').",
+        "coworker": "Write as one word without a hyphen.",
+        "drop-down": "Use hyphen for noun/adjective (e.g., 'a drop-down menu'), no hyphen for verb ('drop down').",
+        "e-commerce": "Use hyphen when referring to the industry.",
+        "homepage": "Write as one word (not home page).",
+        "login": "Write as one word for noun/adjective (e.g., 'login screen'), two words for verb ('log in to the app').",
+        "signup": "Write as one word for noun/adjective (e.g., 'signup page'), two words for verb ('sign up for our list').",
+        "opt-in": "Use hyphen for noun/adjective (e.g., 'opt-in checkbox'), two words for verb ('opt in to emails').",
+        "third-party": "Use hyphen for adjective (e.g., 'third-party tool'), two words for noun ('a third party').",
+        "OK": "Always write capitalized as OK (never Ok or ok).",
+        "WiFi": "Always write capitalized as WiFi (never Wifi or wifi)."
+      }
+    }
+  }
+}
