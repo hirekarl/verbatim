@@ -107,6 +107,30 @@ class TestBrandGuidelinesEvaluator:
         ]
         assert len(oxford_violations) == 0
 
+    def test_oxford_comma_two_item_conjunction_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that two-item conjunctions don't trigger false positive."""
+        # These are normal two-item conjunctions, not 3+ item lists
+        test_cases = [
+            "In 2020, mobile and desktop usage grew rapidly.",
+            "After launch, sales and marketing teams collaborate.",
+            "For iOS, tap and hold the icon.",
+            "By default, templates and automation are enabled.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            oxford_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "oxford comma" in v.message.lower()
+            ]
+            assert (
+                len(oxford_violations) == 0
+            ), f"False positive for two-item conjunction: '{text}'"
+
     def test_violation_structure(self, evaluator: BrandGuidelinesEvaluator) -> None:
         """Test that violations have the expected structure."""
         text = "We leverage our platform."

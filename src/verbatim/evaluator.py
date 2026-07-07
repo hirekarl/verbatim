@@ -150,6 +150,7 @@ class BrandGuidelinesEvaluator:
         """Check for missing Oxford commas in lists.
 
         Detects patterns like "A, B and C" and suggests "A, B, and C".
+        Only flags 3+ item lists, not two-item conjunctions.
 
         Args:
             text: The text to check
@@ -159,22 +160,51 @@ class BrandGuidelinesEvaluator:
         """
         violations: list[Violation] = []
 
-        # Pattern: word/phrase, word/phrase and word/phrase
-        # Looking for: ", [word(s)] and [word(s)]" without a comma before "and"
-        # Simplified pattern: , \w+ and \w+
+        # Pattern: Find potential Oxford comma violations
+        # Matches: ", word(s) and word(s)"
         pattern = r",\s+(\w+(?:\s+\w+)?)\s+and\s+(\w+)"
 
         matches = re.finditer(pattern, text)
 
         for match in matches:
-            violations.append(
-                Violation(
-                    category="formatting_and_style",
-                    severity="warning",
-                    message="Missing Oxford comma in list",
-                    matched_text=match.group(),
-                    suggestion=match.group().replace(" and ", ", and "),
-                )
+            # Check if this is a 3+ item list by analyzing the context
+            # The match includes the comma: ", item and item"
+            # For a 3+ item list, we expect to see list-like structure before
+
+            start_pos = match.start()
+
+            # Look back to find the item before this comma
+            # We need to skip back past the comma and the word before it
+            lookback_start = max(0, start_pos - 80)
+            preceding_text = text[lookback_start:start_pos]
+
+            # Check if preceding text looks like a list or a clause boundary
+            # Clause indicators: starts with prep phrases, has sentence punct
+            sentence_boundary_pattern = r"[.!?]\s"
+            has_sentence_boundary = re.search(sentence_boundary_pattern, preceding_text)
+
+            # Check for common clause-starting phrases that indicate
+            # this is NOT a list but a clause + conjunction
+            # E.g., "In 2020,", "After launch,", "For iOS,", "By default,"
+            clause_starters = (
+                r"\b(In|After|For|By|When|Since|Before|During|From)\s+[\w\s]+$"
             )
+            looks_like_clause = re.search(
+                clause_starters, preceding_text, re.IGNORECASE
+            )
+
+            # Only flag if no sentence boundary and doesn't look like a clause
+            # This catches real lists like "templates, automation and analytics"
+            # while avoiding "In 2020, mobile and desktop"
+            if not has_sentence_boundary and not looks_like_clause:
+                violations.append(
+                    Violation(
+                        category="formatting_and_style",
+                        severity="warning",
+                        message="Missing Oxford comma in list",
+                        matched_text=match.group(),
+                        suggestion=match.group().replace(" and ", ", and "),
+                    )
+                )
 
         return violations
