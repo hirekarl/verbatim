@@ -17,6 +17,9 @@ dependencies = [
     "python-dotenv>=1.2.2",
 ]
 
+[project.scripts]
+verbatim = "verbatim.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -77,6 +80,7 @@ addopts = "--cov=src/verbatim --cov-report=term-missing --cov-report=xml --cov-f
 [tool.coverage.run]
 source = ["src/verbatim"]
 branch = true
+omit = ["src/verbatim/__main__.py"]
 
 [tool.coverage.report]
 exclude_lines = [

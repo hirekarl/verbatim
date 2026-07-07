@@ -136,6 +136,51 @@ def _execute_batch_update(
         raise DocsClientError(error_message) from err
 
 
+def _extract_paragraph_clean_text(paragraph: dict[str, Any]) -> str:
+    """Extract paragraph text ignoring struck-through elements."""
+    clean_text = ""
+    for element in paragraph.get("elements", []):
+        text_run = element.get("textRun")
+        if text_run is None:
+            continue
+        is_strikethrough = text_run.get("textStyle", {}).get("strikethrough", False)
+        if is_strikethrough:
+            continue
+        clean_text += text_run.get("content", "")
+    return clean_text
+
+
+def _extract_paragraph_clean_text_and_map(
+    paragraph: dict[str, Any], paragraph_start: int
+) -> tuple[str, list[int]]:
+    """Extract clean text and map each character's Python index to Doc UTF-16 index."""
+    clean_text = ""
+    index_map = []
+    current_doc_idx = paragraph_start
+
+    for element in paragraph.get("elements", []):
+        text_run = element.get("textRun")
+        if text_run is None:
+            current_doc_idx += 1
+            continue
+
+        is_strikethrough = text_run.get("textStyle", {}).get("strikethrough", False)
+        content = text_run.get("content", "")
+        content_len = _utf16_length(content)
+
+        if is_strikethrough:
+            current_doc_idx += content_len
+            continue
+
+        for char in content:
+            char_utf16_len = _utf16_length(char)
+            clean_text += char
+            index_map.append(current_doc_idx)
+            current_doc_idx += char_utf16_len
+
+    return clean_text, index_map
+
+
 def _extract_title_body_and_headings(
     document: dict[str, Any],
 ) -> tuple[str, str, list[Heading]]:
@@ -157,10 +202,7 @@ def _extract_title_body_and_headings(
         if paragraph is None:
             continue
 
-        paragraph_text = "".join(
-            element.get("textRun", {}).get("content", "")
-            for element in paragraph.get("elements", [])
-        )
+        paragraph_text = _extract_paragraph_clean_text(paragraph)
         body_text += paragraph_text
 
         named_style_type = paragraph.get("paragraphStyle", {}).get("namedStyleType", "")
@@ -173,10 +215,11 @@ def _extract_title_body_and_headings(
 
 @dataclass(frozen=True)
 class _TextChunk:
-    """A single paragraph's text, anchored to its document-level start index."""
+    """A single paragraph's clean text and mapping to original doc indices."""
 
     start_index: int
     text: str
+    index_map: list[int]
 
 
 def _extract_text_chunks(document: dict[str, Any]) -> list[_TextChunk]:
@@ -186,8 +229,8 @@ def _extract_text_chunks(document: dict[str, Any]) -> list[_TextChunk]:
         document: The raw JSON body returned by ``documents.get``.
 
     Returns:
-        One chunk per paragraph, in document order, each carrying the UTF-16
-        ``startIndex`` of its enclosing structural element.
+        One chunk per paragraph, in document order, containing clean text
+        and doc index mapping.
     """
     chunks: list[_TextChunk] = []
     for structural_element in document.get("body", {}).get("content", []):
@@ -195,15 +238,12 @@ def _extract_text_chunks(document: dict[str, Any]) -> list[_TextChunk]:
         if paragraph is None:
             continue
 
-        paragraph_text = "".join(
-            element.get("textRun", {}).get("content", "")
-            for element in paragraph.get("elements", [])
+        paragraph_start = structural_element.get("startIndex", 0)
+        text, index_map = _extract_paragraph_clean_text_and_map(
+            paragraph, paragraph_start
         )
         chunks.append(
-            _TextChunk(
-                start_index=structural_element.get("startIndex", 0),
-                text=paragraph_text,
-            )
+            _TextChunk(start_index=paragraph_start, text=text, index_map=index_map)
         )
 
     return chunks
@@ -220,9 +260,7 @@ def _locate_document_range(
     """Find the unique UTF-16 [start, end) range of ``matched_text`` in the document.
 
     Searches each paragraph independently, so a match spanning a paragraph
-    break is not supported. Match offsets are converted from Python string
-    positions to UTF-16 code units so that surrogate pairs (e.g. emoji)
-    preceding a match don't throw off the resulting index.
+    break is not supported.
 
     Args:
         document: The raw JSON body returned by ``documents.get``.
@@ -236,14 +274,20 @@ def _locate_document_range(
         AmbiguousMatchError: ``matched_text`` appears more than once.
     """
     found: list[tuple[int, int]] = []
-    match_length = _utf16_length(matched_text)
 
     for chunk in _extract_text_chunks(document):
         search_from = 0
         while (offset := chunk.text.find(matched_text, search_from)) != -1:
-            prefix_length = _utf16_length(chunk.text[:offset])
-            start = chunk.start_index + prefix_length
-            found.append((start, start + match_length))
+            match_end = offset + len(matched_text)
+            start = chunk.index_map[offset]
+            if match_end < len(chunk.text):
+                end = chunk.index_map[match_end]
+            else:
+                last_char_idx = chunk.index_map[match_end - 1]
+                last_char = chunk.text[match_end - 1]
+                end = last_char_idx + _utf16_length(last_char)
+
+            found.append((start, end))
             search_from = offset + 1
 
     if not found:
