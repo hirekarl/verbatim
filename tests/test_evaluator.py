@@ -449,6 +449,20 @@ class TestBrandGuidelinesEvaluator:
         ]
         assert len(space_violations) == 0
 
+    def test_double_space_with_non_breaking_space(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test detection of double spaces using non-breaking spaces (NBSP)."""
+        text = "One sentence." + chr(0xA0) * 2 + "Another sentence from Google Docs."
+        violations = evaluator.evaluate(text)
+
+        space_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style" and "space" in v.message.lower()
+        ]
+        assert len(space_violations) == 1
+
     def test_detect_click_here_links(self, evaluator: BrandGuidelinesEvaluator) -> None:
         """Test detection of non-descriptive link text."""
         test_cases = [

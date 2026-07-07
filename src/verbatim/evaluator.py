@@ -399,8 +399,9 @@ class BrandGuidelinesEvaluator:
         """
         violations: list[Violation] = []
 
-        # Find patterns of 2 or more consecutive spaces
-        pattern = r" {2,}"
+        # Find patterns of 2 or more consecutive spaces, including
+        # non-breaking spaces (\xa0), which Google Docs commonly inserts
+        pattern = r"[ \xa0]{2,}"
         matches = re.finditer(pattern, text)
 
         for match in matches:
