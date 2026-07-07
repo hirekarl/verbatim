@@ -13,8 +13,15 @@ from googleapiclient.errors import HttpError
 DEFAULT_SCOPES = ["https://www.googleapis.com/auth/documents.readonly"]
 WRITE_SCOPES = [
     "https://www.googleapis.com/auth/documents",
-    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive",
 ]
+
+_HIGHLIGHT_BACKGROUND_COLOR = {
+    "color": {"rgbColor": {"red": 1.0, "green": 1.0, "blue": 0.0}}
+}
+_REPLACEMENT_TEXT_COLOR = {
+    "color": {"rgbColor": {"red": 0.0, "green": 0.6, "blue": 0.0}}
+}
 
 
 class DocsClientError(Exception):
@@ -105,6 +112,28 @@ def _fetch_document(service: Any, document_id: str) -> dict[str, Any]:
                 f"Access denied for document: {document_id}"
             ) from err
         raise DocsClientError(f"Failed to fetch document: {document_id}") from err
+
+
+def _execute_batch_update(
+    service: Any, document_id: str, requests: list[dict[str, Any]], error_message: str
+) -> None:
+    """Execute a documents.batchUpdate call, mapping HttpErrors to DocsClientError.
+
+    Args:
+        service: An authenticated Docs API v1 discovery ``Resource``.
+        document_id: The Google Docs document ID to update.
+        requests: The batch's list of update request dicts.
+        error_message: The message to raise as ``DocsClientError`` on failure.
+
+    Raises:
+        DocsClientError: The batch update failed.
+    """
+    try:
+        service.documents().batchUpdate(
+            documentId=document_id, body={"requests": requests}
+        ).execute()
+    except HttpError as err:
+        raise DocsClientError(error_message) from err
 
 
 def _extract_title_body_and_headings(
@@ -374,6 +403,30 @@ class GoogleDocsClient:
             headings=headings,
         )
 
+    def _can_edit_directly(self, document_id: str) -> bool:
+        """Check whether the authenticated account has Editor access to a file.
+
+        Used by ``create_suggestion`` and ``create_inline_comment`` to decide
+        whether a batchUpdate would land as a reviewable suggestion
+        (Commenter/Suggester) or a silent direct edit (Editor) — the Docs API
+        has no explicit suggestion-mode request flag, so this is the only way
+        to tell in advance.
+
+        Args:
+            document_id: The Google Docs (Drive file) ID to check.
+
+        Returns:
+            True if the account can edit the file directly.
+        """
+        assert self._drive_service is not None
+        result = (
+            self._drive_service.files()
+            .get(fileId=document_id, fields="capabilities(canEdit)")
+            .execute()
+        )
+        can_edit: bool = result.get("capabilities", {}).get("canEdit", False)
+        return can_edit
+
     def create_suggestion(
         self, document_id: str, matched_text: str, replacement_text: str
     ) -> None:
@@ -382,12 +435,17 @@ class GoogleDocsClient:
         Whether this lands as a Google Docs "suggestion" (advisory, must be
         accepted) versus a direct edit depends on the OAuth principal's
         sharing role on the document (Commenter/Suggester vs. Editor) — the
-        Docs API has no explicit suggestion-mode request flag.
+        Docs API has no explicit suggestion-mode request flag. When a Drive
+        service is configured, this is checked in advance: an Editor-capable
+        account gets the original text struck through with the replacement
+        inserted after it in bold, instead of a silent, un-reviewable direct
+        edit.
 
         Args:
             document_id: The Google Docs document ID to edit.
             matched_text: The exact, unique substring to replace.
-            replacement_text: The text to replace it with.
+            replacement_text: The text to replace it with. An empty string
+                marks a pure cut (strikethrough only, nothing inserted).
 
         Raises:
             TextNotFoundError: ``matched_text`` doesn't appear in the document.
@@ -396,8 +454,45 @@ class GoogleDocsClient:
         """
         document = _fetch_document(self._service, document_id)
         start, end = _locate_document_range(document, matched_text)
-        body = {
-            "requests": [
+
+        if self._drive_service is not None and self._can_edit_directly(document_id):
+            requests: list[dict[str, Any]] = [
+                {
+                    "updateTextStyle": {
+                        "range": {"startIndex": start, "endIndex": end},
+                        "textStyle": {"strikethrough": True},
+                        "fields": "strikethrough",
+                    }
+                }
+            ]
+            if replacement_text:
+                insertion_length = _utf16_length(replacement_text)
+                requests.append(
+                    {
+                        "insertText": {
+                            "location": {"index": end},
+                            "text": replacement_text,
+                        }
+                    }
+                )
+                requests.append(
+                    {
+                        "updateTextStyle": {
+                            "range": {
+                                "startIndex": end,
+                                "endIndex": end + insertion_length,
+                            },
+                            "textStyle": {
+                                "bold": True,
+                                "strikethrough": False,
+                                "foregroundColor": _REPLACEMENT_TEXT_COLOR,
+                            },
+                            "fields": "bold,strikethrough,foregroundColor",
+                        }
+                    }
+                )
+        else:
+            requests = [
                 {
                     "deleteContentRange": {
                         "range": {"startIndex": start, "endIndex": end}
@@ -410,15 +505,13 @@ class GoogleDocsClient:
                     }
                 },
             ]
-        }
-        try:
-            self._service.documents().batchUpdate(
-                documentId=document_id, body=body
-            ).execute()
-        except HttpError as err:
-            raise DocsClientError(
-                f"Failed to create suggestion in document: {document_id}"
-            ) from err
+
+        _execute_batch_update(
+            self._service,
+            document_id,
+            requests,
+            f"Failed to create suggestion in document: {document_id}",
+        )
 
     def create_inline_comment(
         self, document_id: str, matched_text: str, comment: str
@@ -430,7 +523,10 @@ class GoogleDocsClient:
         at construction time. The comment isn't anchored to a precise text
         range in the Drive UI (Drive's ``anchor`` field uses an unconfirmed,
         largely undocumented JSON micro-schema) — instead, ``matched_text``
-        is quoted in the comment body so the copywriter can find it.
+        is quoted in the comment body so the copywriter can find it. On an
+        Editor-capable account, the matched span is also highlighted in the
+        document itself, since such an account can't get a native Docs
+        comment-anchor highlight either way.
 
         Args:
             document_id: The Google Docs (Drive file) ID to comment on.
@@ -450,7 +546,7 @@ class GoogleDocsClient:
                 "from_local_credentials(include_drive=True)."
             )
         document = _fetch_document(self._service, document_id)
-        _locate_document_range(document, matched_text)
+        start, end = _locate_document_range(document, matched_text)
         body = {"content": f'Re: "{matched_text}"\n\n{comment}'}
         try:
             self._drive_service.comments().create(
@@ -460,3 +556,21 @@ class GoogleDocsClient:
             raise DocsClientError(
                 f"Failed to create comment on document: {document_id}"
             ) from err
+
+        if self._can_edit_directly(document_id):
+            _execute_batch_update(
+                self._service,
+                document_id,
+                [
+                    {
+                        "updateTextStyle": {
+                            "range": {"startIndex": start, "endIndex": end},
+                            "textStyle": {
+                                "backgroundColor": _HIGHLIGHT_BACKGROUND_COLOR
+                            },
+                            "fields": "backgroundColor",
+                        }
+                    }
+                ],
+                f"Failed to highlight matched text in document: {document_id}",
+            )

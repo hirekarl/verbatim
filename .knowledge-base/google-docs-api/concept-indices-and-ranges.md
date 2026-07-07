@@ -35,3 +35,15 @@ sequence batch requests carefully, or issue them in an order (e.g.
 last-range-first) that avoids invalidating indices you still need. Not relevant to
 Day 1's read-only calls, but load-bearing for `create_suggestion` later — don't
 forget it exists by the time that work starts.
+
+**Confirmed, single-contiguous-edit-region case needs no compensation:** the
+Editor-role "editor marks" path (`updateTextStyle` strikethrough on `[start,
+end)` → `insertText` at `end` → `updateTextStyle` bold on `[end, end +
+len(replacement))`) doesn't need any index-shift math, because each request's
+range is either unaffected by length changes (the strikethrough, which doesn't
+change document length) or is *defined by* the immediately preceding request's
+own effect (the replacement's range is exactly "wherever we just inserted it,
+for however long it is" — known in advance, not derived by re-reading
+post-insert state). This is the easy case the note above warns is *not*
+generally true — it only holds because there's one edit region, not multiple
+disjoint ones in the same batch.

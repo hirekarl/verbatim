@@ -24,8 +24,10 @@
   against the audited document's ID.
 - `get_campaign_context` (Day 1, same module) — `documents.get` against a *separate*
   campaign brief document's ID. Same endpoint, different document.
-- `create_suggestion` (Day 2) — `documents.batchUpdate` with a
-  `SuggestChangesRequest`, not built yet.
+- `create_suggestion` (Day 2, built) — `documents.batchUpdate` with a plain
+  delete+insert; lands as a "Suggested edit" only if the OAuth principal has
+  Commenter/Suggester (not Editor) access. See
+  [`resource-documents.md`](resource-documents.md)'s `batchUpdate` section.
 
 ## Gotcha: comments are NOT a Docs API call
 

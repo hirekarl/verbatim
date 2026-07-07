@@ -685,6 +685,176 @@ class TestGoogleDocsClientCreateSuggestion:
             client.create_suggestion("doc-id", "feature", "capability")
 
 
+class TestGoogleDocsClientCreateSuggestionEditorFallback:
+    """Tests for create_suggestion's editor marks when the account can't suggest."""
+
+    @pytest.fixture
+    def fake_service(self) -> MagicMock:
+        """A fake Docs API discovery service returning a fixed document."""
+        service = MagicMock()
+        service.documents.return_value.get.return_value.execute.return_value = (
+            _FAKE_DOCUMENT_WITH_INDICES
+        )
+        return service
+
+    @pytest.fixture
+    def fake_drive_service(self) -> MagicMock:
+        """A fake Drive API discovery service, defaulting to non-Editor access."""
+        drive_service = MagicMock()
+        drive_service.files.return_value.get.return_value.execute.return_value = {
+            "capabilities": {"canEdit": False}
+        }
+        return drive_service
+
+    @pytest.fixture
+    def client(
+        self, fake_service: MagicMock, fake_drive_service: MagicMock
+    ) -> GoogleDocsClient:
+        """A GoogleDocsClient wired to both fake services."""
+        return GoogleDocsClient(service=fake_service, drive_service=fake_drive_service)
+
+    def test_strikes_through_and_inserts_bold_replacement_when_account_can_edit(
+        self,
+        client: GoogleDocsClient,
+        fake_service: MagicMock,
+        fake_drive_service: MagicMock,
+    ) -> None:
+        """An Editor-capable account gets inline strikethrough+bold marks, not a
+        comment.
+        """
+        fake_drive_service.files.return_value.get.return_value.execute.return_value = {
+            "capabilities": {"canEdit": True}
+        }
+
+        client.create_suggestion("doc-id", "feature", "capability")
+
+        fake_drive_service.comments.return_value.create.assert_not_called()
+        fake_service.documents.return_value.batchUpdate.assert_called_once_with(
+            documentId="doc-id",
+            body={
+                "requests": [
+                    {
+                        "updateTextStyle": {
+                            "range": {"startIndex": 19, "endIndex": 26},
+                            "textStyle": {"strikethrough": True},
+                            "fields": "strikethrough",
+                        }
+                    },
+                    {
+                        "insertText": {
+                            "location": {"index": 26},
+                            "text": "capability",
+                        }
+                    },
+                    {
+                        "updateTextStyle": {
+                            "range": {"startIndex": 26, "endIndex": 36},
+                            "textStyle": {
+                                "bold": True,
+                                "strikethrough": False,
+                                "foregroundColor": {
+                                    "color": {
+                                        "rgbColor": {
+                                            "red": 0.0,
+                                            "green": 0.6,
+                                            "blue": 0.0,
+                                        }
+                                    }
+                                },
+                            },
+                            "fields": "bold,strikethrough,foregroundColor",
+                        }
+                    },
+                ]
+            },
+        )
+
+    def test_only_strikes_through_when_replacement_text_is_empty(
+        self,
+        client: GoogleDocsClient,
+        fake_service: MagicMock,
+        fake_drive_service: MagicMock,
+    ) -> None:
+        """A pure-cut suggestion (no replacement) skips the insert/bold requests."""
+        fake_drive_service.files.return_value.get.return_value.execute.return_value = {
+            "capabilities": {"canEdit": True}
+        }
+
+        client.create_suggestion("doc-id", "feature", "")
+
+        fake_service.documents.return_value.batchUpdate.assert_called_once_with(
+            documentId="doc-id",
+            body={
+                "requests": [
+                    {
+                        "updateTextStyle": {
+                            "range": {"startIndex": 19, "endIndex": 26},
+                            "textStyle": {"strikethrough": True},
+                            "fields": "strikethrough",
+                        }
+                    },
+                ]
+            },
+        )
+
+    def test_wraps_batch_update_http_errors_as_docs_client_error_in_editor_branch(
+        self,
+        client: GoogleDocsClient,
+        fake_service: MagicMock,
+        fake_drive_service: MagicMock,
+    ) -> None:
+        """An HttpError from the editor-branch batchUpdate is wrapped as
+        DocsClientError.
+        """
+        fake_drive_service.files.return_value.get.return_value.execute.return_value = {
+            "capabilities": {"canEdit": True}
+        }
+        batch_update = fake_service.documents.return_value.batchUpdate
+        batch_update.return_value.execute.side_effect = _make_http_error(500)
+
+        with pytest.raises(DocsClientError):
+            client.create_suggestion("doc-id", "feature", "capability")
+
+    def test_uses_batch_update_when_the_account_can_only_suggest(
+        self,
+        client: GoogleDocsClient,
+        fake_service: MagicMock,
+        fake_drive_service: MagicMock,
+    ) -> None:
+        """A Commenter/Suggester-capable account still gets a real suggestion."""
+        client.create_suggestion("doc-id", "feature", "capability")
+
+        fake_service.documents.return_value.batchUpdate.assert_called_once()
+        fake_drive_service.comments.return_value.create.assert_not_called()
+
+    def test_checks_capabilities_for_the_correct_document(
+        self, client: GoogleDocsClient, fake_drive_service: MagicMock
+    ) -> None:
+        """The capability check targets the document being suggested on."""
+        client.create_suggestion("doc-id", "feature", "capability")
+
+        fake_drive_service.files.return_value.get.assert_called_once_with(
+            fileId="doc-id", fields="capabilities(canEdit)"
+        )
+
+    def test_raises_text_not_found_error_without_calling_batch_update_or_comment(
+        self,
+        client: GoogleDocsClient,
+        fake_service: MagicMock,
+        fake_drive_service: MagicMock,
+    ) -> None:
+        """A non-existent matched_text raises before any write is issued."""
+        fake_drive_service.files.return_value.get.return_value.execute.return_value = {
+            "capabilities": {"canEdit": True}
+        }
+
+        with pytest.raises(TextNotFoundError):
+            client.create_suggestion("doc-id", "nowhere", "replacement")
+
+        fake_service.documents.return_value.batchUpdate.assert_not_called()
+        fake_drive_service.comments.return_value.create.assert_not_called()
+
+
 class TestGoogleDocsClientCreateInlineComment:
     """Tests for GoogleDocsClient.create_inline_comment."""
 
@@ -699,8 +869,12 @@ class TestGoogleDocsClientCreateInlineComment:
 
     @pytest.fixture
     def fake_drive_service(self) -> MagicMock:
-        """A fake Drive API discovery service."""
-        return MagicMock()
+        """A fake Drive API discovery service, defaulting to non-Editor access."""
+        drive_service = MagicMock()
+        drive_service.files.return_value.get.return_value.execute.return_value = {
+            "capabilities": {"canEdit": False}
+        }
+        return drive_service
 
     @pytest.fixture
     def client(
@@ -745,6 +919,80 @@ class TestGoogleDocsClientCreateInlineComment:
         """An HttpError from comments.create is wrapped as DocsClientError."""
         create = fake_drive_service.comments.return_value.create
         create.return_value.execute.side_effect = _make_http_error(500)
+
+        with pytest.raises(DocsClientError):
+            client.create_inline_comment("doc-id", "feature", "Consider rephrasing.")
+
+    def test_applies_a_background_highlight_when_the_account_can_edit_directly(
+        self,
+        client: GoogleDocsClient,
+        fake_service: MagicMock,
+        fake_drive_service: MagicMock,
+    ) -> None:
+        """An Editor-capable account also gets the matched span highlighted."""
+        fake_drive_service.files.return_value.get.return_value.execute.return_value = {
+            "capabilities": {"canEdit": True}
+        }
+
+        client.create_inline_comment("doc-id", "feature", "Consider rephrasing.")
+
+        fake_service.documents.return_value.batchUpdate.assert_called_once_with(
+            documentId="doc-id",
+            body={
+                "requests": [
+                    {
+                        "updateTextStyle": {
+                            "range": {"startIndex": 19, "endIndex": 26},
+                            "textStyle": {
+                                "backgroundColor": {
+                                    "color": {
+                                        "rgbColor": {
+                                            "red": 1.0,
+                                            "green": 1.0,
+                                            "blue": 0.0,
+                                        }
+                                    }
+                                }
+                            },
+                            "fields": "backgroundColor",
+                        }
+                    }
+                ]
+            },
+        )
+
+    def test_does_not_apply_a_highlight_when_the_account_cannot_edit_directly(
+        self,
+        client: GoogleDocsClient,
+        fake_service: MagicMock,
+    ) -> None:
+        """A Commenter/Suggester-capable account's comment is left unchanged."""
+        client.create_inline_comment("doc-id", "feature", "Consider rephrasing.")
+
+        fake_service.documents.return_value.batchUpdate.assert_not_called()
+
+    def test_checks_capabilities_for_the_correct_document(
+        self, client: GoogleDocsClient, fake_drive_service: MagicMock
+    ) -> None:
+        """The capability check targets the document being commented on."""
+        client.create_inline_comment("doc-id", "feature", "Consider rephrasing.")
+
+        fake_drive_service.files.return_value.get.assert_called_once_with(
+            fileId="doc-id", fields="capabilities(canEdit)"
+        )
+
+    def test_wraps_highlight_batch_update_http_errors_as_docs_client_error(
+        self,
+        client: GoogleDocsClient,
+        fake_service: MagicMock,
+        fake_drive_service: MagicMock,
+    ) -> None:
+        """An HttpError from the highlight batchUpdate is wrapped as DocsClientError."""
+        fake_drive_service.files.return_value.get.return_value.execute.return_value = {
+            "capabilities": {"canEdit": True}
+        }
+        batch_update = fake_service.documents.return_value.batchUpdate
+        batch_update.return_value.execute.side_effect = _make_http_error(500)
 
         with pytest.raises(DocsClientError):
             client.create_inline_comment("doc-id", "feature", "Consider rephrasing.")

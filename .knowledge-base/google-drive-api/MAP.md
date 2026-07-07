@@ -3,9 +3,14 @@
 - **Service endpoint:** `https://www.googleapis.com` (Drive-specific paths under
   `/drive/v3/...`)
 - **API version used:** v3
-- **Scopes this project uses:** none yet (Day 1 only touches the Docs API). Day 2's
-  `create_inline_comment` will need `https://www.googleapis.com/auth/drive.file` (or
-  broader `drive`, scoped down as far as it'll work) to post comments.
+- **Scopes this project uses:** `https://www.googleapis.com/auth/drive` (full access).
+  `drive.file` was tried first and confirmed live to be insufficient:
+  `comments.create` 404s with "File not found" against a doc the app didn't create
+  and that wasn't opened via a Google Picker, because `drive.file` only grants
+  per-file access to files the app itself created/opened — it doesn't matter that
+  the authenticated user can open the doc fine in the browser or via the Docs API's
+  broader `documents` scope. No narrower "comments-only" scope exists, so
+  `create_inline_comment` requires the full `drive` scope.
 - **Official reference:**
   <https://developers.google.com/workspace/drive/api/reference/rest/v3>
 

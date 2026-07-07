@@ -68,15 +68,59 @@ full range of `body.content` element types looks like, and
 `POST /v1/documents/{documentId}:batchUpdate`
 
 Applies one or more update requests atomically. This is how `create_suggestion`
-will work — via a `SuggestChangesRequest`-flavored update inside the request body,
-so the edit shows up as a Google Docs "suggestion" (Suggest Changes mode) rather
-than a direct silent edit.
+works — via a plain `deleteContentRange` + `insertText` pair, same as a direct
+edit would use. **There is no `SuggestChangesRequest` type or any other
+suggestion-mode flag in the Docs API v1** (an earlier version of this note claimed
+otherwise; that was wrong). Whether the edit lands as a reviewable "Suggested
+edit" instead of a silent direct edit is entirely a side effect of the OAuth
+principal's sharing role on the document — Commenter/Suggester gets converted to
+a suggestion, Editor applies directly — confirmed against the live API, not just
+inferred from docs.
 
 - **Scope:** requires the read-write `documents` scope, not `documents.readonly`.
 - **Gotcha (forward-looking):** every request in a batch references text by
   `startIndex`/`endIndex`. If a batch contains multiple edits, earlier edits shift
   the indices that later edits in the *same batch* need to target — ordering and
   index math matters. See
+  [`concept-indices-and-ranges.md`](concept-indices-and-ranges.md).
+
+### Confirmed: `updateTextStyle` for Editor-role "editor marks"
+
+For accounts with Editor access (where `batchUpdate` can't produce a native
+suggestion), `create_suggestion`/`create_inline_comment` fall back to manual
+in-text marks via `updateTextStyle`, confirmed live against a real doc:
+
+```json
+{
+  "updateTextStyle": {
+    "range": { "startIndex": 19, "endIndex": 26 },
+    "textStyle": { "strikethrough": true },
+    "fields": "strikethrough"
+  }
+}
+```
+
+- `fields` is a comma-separated `FieldMask` naming exactly which `textStyle`
+  properties to write (`"strikethrough"`, `"bold,strikethrough"`,
+  `"backgroundColor"`, ...) — properties present in `textStyle` but absent from
+  `fields` are silently ignored, not applied.
+- `backgroundColor` (highlighting) and `foregroundColor` (used to color the
+  bold-inserted replacement text green, distinguishing it from the
+  struck-through original) are both `OptionalColor`, nested as
+  `{"color": {"rgbColor": {"red": ..., "green": ..., "blue": ...}}}` (floats
+  0.0–1.0) — not a bare `{"red": ...}`. Zero-valued channels are omitted from
+  the API's echoed-back response (e.g. pure green comes back as
+  `{"rgbColor": {"green": 0.6}}`, not `{"red": 0.0, "green": 0.6, "blue": 0.0}`)
+  — don't mistake that for the color having been dropped.
+- **Gotcha, confirmed live:** `insertText` inherits the text style of the
+  character immediately preceding the insertion point. Inserting a bold
+  replacement right after a struck-through original therefore requires
+  explicitly setting `"strikethrough": false` (not just omitting it) in the
+  replacement's own `updateTextStyle` request — confirmed live that the
+  explicit override wins over inheritance.
+- No index-shift compensation is needed for a single contiguous edit region
+  (strikethrough the original → insert the replacement → restyle the newly
+  inserted range) — see the confirmation in
   [`concept-indices-and-ranges.md`](concept-indices-and-ranges.md).
 
 ## `documents.create` (not used — Verbatim never creates documents)

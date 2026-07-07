@@ -4,18 +4,20 @@ Verbatim is an AI agent that reviews draft marketing copy inside Google Docs aga
 
 ## Table of contents
 
-- [Current sprint](#current-sprint)
-- [Prerequisites](#prerequisites)
-- [macOS setup](#macos-setup)
-- [Windows setup](#windows-setup)
-- [Clone & bootstrap](#clone--bootstrap)
-- [Common commands](#common-commands)
-- [Development workflow](#development-workflow)
-- [Google Docs API setup](#google-docs-api-setup)
-- [Agent (OpenRouter) setup](#agent-openrouter-setup)
-- [Project structure](#project-structure)
-- [Versioning](#versioning)
-- [License](#license)
+- [Verbatim](#verbatim)
+  - [Table of contents](#table-of-contents)
+  - [Current sprint](#current-sprint)
+  - [Prerequisites](#prerequisites)
+  - [macOS setup](#macos-setup)
+  - [Windows setup](#windows-setup)
+  - [Clone \& bootstrap](#clone--bootstrap)
+  - [Common commands](#common-commands)
+  - [Development workflow](#development-workflow)
+  - [Google Docs API setup](#google-docs-api-setup)
+  - [Agent (OpenRouter) setup](#agent-openrouter-setup)
+  - [Project structure](#project-structure)
+  - [Versioning](#versioning)
+  - [License](#license)
 
 ## Current sprint
 
@@ -124,6 +126,10 @@ locally:
    suggestion to land as a reviewable "Suggested edit" (rather than a silent direct
    edit), the authenticated account needs Commenter/Suggester — not Editor — access
    on the target document.
+   `WRITE_SCOPES` requests full `drive` access rather than the narrower
+   `drive.file` — confirmed live that `drive.file` 404s on `comments.create` for
+   any doc the app didn't itself create/open (e.g. a doc opened by URL/link, which
+   is Verbatim's whole use case), regardless of the user's own access to that doc.
 
 See `.knowledge-base/google-docs-api/` and `.knowledge-base/google-drive-api/` for
 decomposed reference docs on the underlying REST APIs.
