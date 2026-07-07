@@ -162,6 +162,7 @@ class TestBrandGuidelinesEvaluator:
             "Yesterday, John and Mary went to the store.",  # Karl's example
             "Tomorrow, sales and marketing meet.",
             "However, data and insights matter.",
+            "For $2.99, subscribers and members get access.",
         ]
 
         for text in test_cases:
@@ -195,6 +196,24 @@ class TestBrandGuidelinesEvaluator:
         ]
         assert len(oxford_violations) > 0, (
             "Should flag missing Oxford comma in second sentence"
+        )
+
+    def test_oxford_comma_list_after_clause_starter_still_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test a genuine 3+-item list isn't suppressed by a clause-starter word."""
+        text = "In short, templates, automation and analytics all matter."
+        violations = evaluator.evaluate(text)
+
+        oxford_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style"
+            and "oxford comma" in v.message.lower()
+        ]
+        assert len(oxford_violations) > 0, (
+            "Should flag missing Oxford comma even when sentence starts "
+            "with a clause-starter word, if it's actually a 3+ item list"
         )
 
     def test_violation_structure(self, evaluator: BrandGuidelinesEvaluator) -> None:

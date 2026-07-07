@@ -271,7 +271,15 @@ class BrandGuidelinesEvaluator:
             # or the start of text, whichever comes first
             sentence_start = 0
             for boundary_pos in range(start_pos - 1, -1, -1):
-                if text[boundary_pos] in ".!?":
+                char = text[boundary_pos]
+                if char in ".!?":
+                    # A '.' immediately followed by a digit is a decimal point
+                    # (e.g. "$2.99"), not a sentence boundary
+                    next_char = (
+                        text[boundary_pos + 1] if boundary_pos + 1 < len(text) else ""
+                    )
+                    if next_char.isdigit():
+                        continue
                     sentence_start = boundary_pos + 1
                     break
 
@@ -286,8 +294,16 @@ class BrandGuidelinesEvaluator:
                 r"Yesterday|Today|Tomorrow|Meanwhile|However|Therefore|"
                 r"Thus|Hence|Otherwise|Nevertheless)\b"
             )
-            looks_like_clause = re.search(
-                clause_starters, current_sentence_prefix, re.IGNORECASE
+            # A clause-starter only suppresses this match if there's no other
+            # comma before it in the sentence - if there is, the starter word
+            # is followed by list items, not directly by the "and" pair,
+            # e.g. "In short, templates, automation and analytics" (extra
+            # comma -> genuine list) vs. "In 2020, mobile and desktop" (no
+            # extra comma -> two-item conjunction after an intro clause)
+            looks_like_clause = (
+                re.search(clause_starters, current_sentence_prefix, re.IGNORECASE)
+                is not None
+                and "," not in current_sentence_prefix
             )
 
             # Only flag if it doesn't look like a clause-based two-item conjunction
