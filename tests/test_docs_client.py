@@ -1,11 +1,14 @@
 """Tests for the Google Docs API client module."""
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 from googleapiclient.errors import HttpError
+from pytest_mock import MockerFixture
 
 from verbatim.docs_client import (
+    AuthenticationError,
     CampaignContext,
     DocsClientError,
     DocumentAccessDeniedError,
@@ -15,6 +18,7 @@ from verbatim.docs_client import (
     Heading,
     _extract_title_body_and_headings,
     _fetch_document,
+    _load_credentials,
 )
 
 _FAKE_DOCUMENT_JSON = {
@@ -295,3 +299,147 @@ class TestGoogleDocsClientGetCampaignContext:
         fake_service.documents.return_value.get.assert_called_once_with(
             documentId="brief-id"
         )
+
+
+class TestLoadCredentials:
+    """Tests for OAuth credential loading, refresh, and consent-flow branches."""
+
+    def test_loads_cached_valid_token_without_running_consent_flow(
+        self, mocker: MockerFixture, tmp_path: Path
+    ) -> None:
+        """A cached valid token is returned as-is; no consent flow runs."""
+        token_path = tmp_path / "token.json"
+        token_path.write_text("{}")
+        client_secret_path = tmp_path / "client_secret.json"
+        fake_creds = MagicMock(valid=True)
+        mock_credentials = mocker.patch("verbatim.docs_client.Credentials")
+        mock_credentials.from_authorized_user_file.return_value = fake_creds
+        mock_flow = mocker.patch("verbatim.docs_client.InstalledAppFlow")
+
+        result = _load_credentials(client_secret_path, token_path, ["scope"])
+
+        assert result is fake_creds
+        mock_flow.from_client_secrets_file.assert_not_called()
+
+    def test_refreshes_an_expired_token_using_its_refresh_token(
+        self, mocker: MockerFixture, tmp_path: Path
+    ) -> None:
+        """An expired cached token with a refresh token is refreshed and persisted."""
+        token_path = tmp_path / "token.json"
+        token_path.write_text("{}")
+        client_secret_path = tmp_path / "client_secret.json"
+        fake_creds = MagicMock(valid=False, expired=True, refresh_token="refresh-me")
+        fake_creds.to_json.return_value = '{"refreshed": true}'
+        mock_credentials = mocker.patch("verbatim.docs_client.Credentials")
+        mock_credentials.from_authorized_user_file.return_value = fake_creds
+        mock_request = mocker.patch("verbatim.docs_client.Request")
+        mock_flow = mocker.patch("verbatim.docs_client.InstalledAppFlow")
+
+        result = _load_credentials(client_secret_path, token_path, ["scope"])
+
+        assert result is fake_creds
+        fake_creds.refresh.assert_called_once_with(mock_request.return_value)
+        mock_flow.from_client_secrets_file.assert_not_called()
+        assert token_path.read_text() == '{"refreshed": true}'
+
+    def test_runs_local_server_consent_flow_when_no_cached_token_exists(
+        self, mocker: MockerFixture, tmp_path: Path
+    ) -> None:
+        """With no cached token, the installed-app consent flow runs and persists."""
+        token_path = tmp_path / "token.json"
+        client_secret_path = tmp_path / "client_secret.json"
+        client_secret_path.write_text("{}")
+        fake_creds = MagicMock()
+        fake_creds.to_json.return_value = '{"new": true}'
+        mock_flow_class = mocker.patch("verbatim.docs_client.InstalledAppFlow")
+        mock_run_local_server = (
+            mock_flow_class.from_client_secrets_file.return_value.run_local_server
+        )
+        mock_run_local_server.return_value = fake_creds
+        mock_credentials = mocker.patch("verbatim.docs_client.Credentials")
+
+        result = _load_credentials(client_secret_path, token_path, ["scope"])
+
+        assert result is fake_creds
+        mock_credentials.from_authorized_user_file.assert_not_called()
+        mock_flow_class.from_client_secrets_file.assert_called_once_with(
+            str(client_secret_path), ["scope"]
+        )
+        assert token_path.read_text() == '{"new": true}'
+
+    def test_raises_authentication_error_when_client_secret_file_is_missing(
+        self, mocker: MockerFixture, tmp_path: Path
+    ) -> None:
+        """Missing client secret file with no cached token raises an error."""
+        token_path = tmp_path / "token.json"
+        client_secret_path = tmp_path / "client_secret.json"
+        mock_flow = mocker.patch("verbatim.docs_client.InstalledAppFlow")
+
+        with pytest.raises(AuthenticationError):
+            _load_credentials(client_secret_path, token_path, ["scope"])
+
+        mock_flow.from_client_secrets_file.assert_not_called()
+
+    def test_raises_authentication_error_when_refresh_fails(
+        self, mocker: MockerFixture, tmp_path: Path
+    ) -> None:
+        """A refresh failure on an expired cached token raises AuthenticationError."""
+        token_path = tmp_path / "token.json"
+        token_path.write_text("{}")
+        client_secret_path = tmp_path / "client_secret.json"
+        fake_creds = MagicMock(valid=False, expired=True, refresh_token="refresh-me")
+        fake_creds.refresh.side_effect = Exception("network error")
+        mock_credentials = mocker.patch("verbatim.docs_client.Credentials")
+        mock_credentials.from_authorized_user_file.return_value = fake_creds
+        mocker.patch("verbatim.docs_client.Request")
+
+        with pytest.raises(AuthenticationError):
+            _load_credentials(client_secret_path, token_path, ["scope"])
+
+    def test_raises_authentication_error_when_consent_flow_fails(
+        self, mocker: MockerFixture, tmp_path: Path
+    ) -> None:
+        """A failure during the installed-app consent flow raises an error."""
+        token_path = tmp_path / "token.json"
+        client_secret_path = tmp_path / "client_secret.json"
+        client_secret_path.write_text("{}")
+        mock_flow_class = mocker.patch("verbatim.docs_client.InstalledAppFlow")
+        mock_run_local_server = (
+            mock_flow_class.from_client_secrets_file.return_value.run_local_server
+        )
+        mock_run_local_server.side_effect = Exception("consent denied")
+        mocker.patch("verbatim.docs_client.Credentials")
+
+        with pytest.raises(AuthenticationError):
+            _load_credentials(client_secret_path, token_path, ["scope"])
+
+
+class TestGoogleDocsClientFromLocalCredentials:
+    """Tests that from_local_credentials wires loaded credentials into build()."""
+
+    def test_builds_docs_v1_service_with_the_loaded_credentials(
+        self, mocker: MockerFixture, tmp_path: Path
+    ) -> None:
+        """from_local_credentials loads credentials and builds the docs v1 service."""
+        fake_creds = MagicMock()
+        fake_service = MagicMock()
+        mock_load_credentials = mocker.patch(
+            "verbatim.docs_client._load_credentials", return_value=fake_creds
+        )
+        mock_build = mocker.patch(
+            "verbatim.docs_client.build", return_value=fake_service
+        )
+        client_secret_path = tmp_path / "client_secret.json"
+        token_path = tmp_path / "token.json"
+
+        client = GoogleDocsClient.from_local_credentials(
+            client_secret_path=client_secret_path, token_path=token_path
+        )
+
+        mock_load_credentials.assert_called_once_with(
+            client_secret_path,
+            token_path,
+            ["https://www.googleapis.com/auth/documents.readonly"],
+        )
+        mock_build.assert_called_once_with("docs", "v1", credentials=fake_creds)
+        assert client._service is fake_service

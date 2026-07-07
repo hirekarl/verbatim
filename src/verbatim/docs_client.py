@@ -1,9 +1,16 @@
 """Google Docs API client: auth plus read-side document/campaign-brief tools."""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+DEFAULT_SCOPES = ["https://www.googleapis.com/auth/documents.readonly"]
 
 
 class DocsClientError(Exception):
@@ -123,6 +130,61 @@ def _extract_title_body_and_headings(
     return title, body_text, headings
 
 
+def _load_credentials(
+    client_secret_path: Path, token_path: Path, scopes: list[str]
+) -> Credentials:
+    """Load cached OAuth credentials, refreshing or requesting consent as needed.
+
+    Args:
+        client_secret_path: Path to the downloaded Google Cloud OAuth client
+            secret JSON file.
+        token_path: Path where a previously-obtained token is cached, and
+            where a newly obtained/refreshed token gets persisted.
+        scopes: The OAuth scopes to request.
+
+    Returns:
+        Valid, usable OAuth credentials.
+
+    Raises:
+        AuthenticationError: The client secret file is missing, the cached
+            token failed to refresh, or the consent flow failed to complete.
+    """
+    creds: Credentials | None = None
+    if token_path.exists():
+        creds = Credentials.from_authorized_user_file(  # type: ignore[no-untyped-call]
+            str(token_path), scopes
+        )
+
+    if creds is not None and creds.valid:
+        return creds
+
+    if creds is not None and creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())  # type: ignore[no-untyped-call]
+        except Exception as err:
+            raise AuthenticationError(
+                "Failed to refresh Google OAuth credentials"
+            ) from err
+    else:
+        if not client_secret_path.exists():
+            raise AuthenticationError(
+                f"Client secret file not found: {client_secret_path}"
+            )
+        try:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                str(client_secret_path), scopes
+            )
+            creds = flow.run_local_server(port=0)
+        except Exception as err:
+            raise AuthenticationError(
+                "Failed to complete Google OAuth consent flow"
+            ) from err
+
+    assert creds is not None  # narrows for mypy; set by one of the branches above
+    token_path.write_text(creds.to_json())
+    return creds
+
+
 class GoogleDocsClient:
     """A thin, read-side wrapper around the Google Docs API v1 client."""
 
@@ -134,6 +196,36 @@ class GoogleDocsClient:
                 ``googleapiclient.discovery.build("docs", "v1", ...)``.
         """
         self._service = service
+
+    @classmethod
+    def from_local_credentials(
+        cls,
+        client_secret_path: Path | None = None,
+        token_path: Path | None = None,
+        scopes: list[str] | None = None,
+    ) -> "GoogleDocsClient":
+        """Build a client using locally cached/obtained OAuth credentials.
+
+        Args:
+            client_secret_path: Path to the downloaded Google Cloud OAuth
+                client secret JSON. Defaults to ``client_secret.json`` in the
+                current working directory.
+            token_path: Path to cache the obtained/refreshed token at.
+                Defaults to ``token.json`` in the current working directory.
+            scopes: OAuth scopes to request. Defaults to
+                ``DEFAULT_SCOPES`` (read-only document access).
+
+        Returns:
+            A GoogleDocsClient backed by an authenticated Docs API v1 service.
+        """
+        resolved_client_secret_path = client_secret_path or Path("client_secret.json")
+        resolved_token_path = token_path or Path("token.json")
+        resolved_scopes = scopes if scopes is not None else DEFAULT_SCOPES
+        credentials = _load_credentials(
+            resolved_client_secret_path, resolved_token_path, resolved_scopes
+        )
+        service = build("docs", "v1", credentials=credentials)
+        return cls(service=service)
 
     def get_document_content(self, document_id: str) -> DocumentContent:
         """Fetch and parse the audited document's content.
