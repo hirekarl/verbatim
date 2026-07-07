@@ -483,6 +483,38 @@ class TestBrandGuidelinesEvaluator:
         ]
         assert len(link_violations) == 0
 
+    def test_click_here_no_duplicate_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that overlapping click-here patterns produce one violation, not two."""
+        text = "Click here to learn more."
+        violations = evaluator.evaluate(text)
+
+        link_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style" and "link" in v.message.lower()
+        ]
+        assert len(link_violations) == 1
+
+    def test_here_word_boundary_not_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that 'here today'/'here forever' aren't mistaken for link phrases."""
+        test_cases = [
+            "I'll be here today.",
+            "We'll be here forever.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            link_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style" and "link" in v.message.lower()
+            ]
+            assert len(link_violations) == 0, f"False positive in '{text}'"
+
     def test_detect_non_standard_spellings(
         self, evaluator: BrandGuidelinesEvaluator
     ) -> None:

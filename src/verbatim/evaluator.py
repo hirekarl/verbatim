@@ -434,23 +434,36 @@ class BrandGuidelinesEvaluator:
         patterns = [
             r"\bclick\s+here\b",
             r"\bclick\s+this\b",
-            r"\bhere\b(?=\s+to|\s+for)",  # "here to" or "here for"
+            r"\bhere\b(?=\s+to\b|\s+for\b)",  # "here to" or "here for"
             r"\bthis\s+link\b",
             r"\bread\s+more\s+here\b",
         ]
 
-        for pattern in patterns:
-            matches = re.finditer(pattern, text, re.IGNORECASE)
-            for match in matches:
-                violations.append(
-                    Violation(
-                        category="formatting_and_style",
-                        severity="warning",
-                        message="Avoid non-descriptive link text like 'click here'",
-                        matched_text=match.group(),
-                        suggestion="Use descriptive keywords that indicate destination",
-                    )
+        # Patterns can overlap on the same phrase (e.g. "click here" and the
+        # standalone "here" in "click here to..."); collect all matches
+        # first, then skip any whose span overlaps one already recorded so
+        # each real instance of bad link text produces one violation.
+        all_matches = [
+            match
+            for pattern in patterns
+            for match in re.finditer(pattern, text, re.IGNORECASE)
+        ]
+
+        matched_spans: list[tuple[int, int]] = []
+        for match in sorted(all_matches, key=lambda m: m.start()):
+            span = match.span()
+            if any(start < span[1] and span[0] < end for start, end in matched_spans):
+                continue
+            matched_spans.append(span)
+            violations.append(
+                Violation(
+                    category="formatting_and_style",
+                    severity="warning",
+                    message="Avoid non-descriptive link text like 'click here'",
+                    matched_text=match.group(),
+                    suggestion="Use descriptive keywords that indicate destination",
                 )
+            )
 
         return violations
 
