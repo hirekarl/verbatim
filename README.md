@@ -17,7 +17,6 @@ and banned words — as inline comments and suggested edits directly in the docu
 - [Project structure](#project-structure)
 - [Versioning](#versioning)
 - [License](#license)
-- [Security](#security)
 
 ## Prerequisites
 
@@ -109,9 +108,11 @@ verbatim/
 │   ├── __init__.py
 │   └── py.typed
 ├── tests/                  # pytest suite
+├── docs/                   # PRD and research reference docs (.docx)
 ├── brand_guidelines.json   # brand voice/style rules fixture
 ├── brand_guidelines.py     # loader for brand_guidelines.json
 ├── BOOTSTRAPPING.md        # scaffolding rationale and remaining setup work
+├── CLAUDE.md               # project context for AI coding agents
 ├── pyproject.toml          # project metadata + all tool configuration
 └── uv.lock                 # pinned dependency versions
 ```
@@ -125,7 +126,3 @@ that plan. Until then, there's no manual version bump step to worry about.
 ## License
 
 MIT.
-
-## Security
-
-To report a security concern, email <[email redacted]>.
