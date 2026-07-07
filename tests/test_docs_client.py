@@ -8,6 +8,7 @@ from googleapiclient.errors import HttpError
 from pytest_mock import MockerFixture
 
 from verbatim.docs_client import (
+    AmbiguousMatchError,
     AuthenticationError,
     CampaignContext,
     DocsClientError,
@@ -16,9 +17,13 @@ from verbatim.docs_client import (
     DocumentNotFoundError,
     GoogleDocsClient,
     Heading,
+    TextNotFoundError,
+    _extract_text_chunks,
     _extract_title_body_and_headings,
     _fetch_document,
     _load_credentials,
+    _locate_document_range,
+    _TextChunk,
 )
 
 _FAKE_DOCUMENT_JSON = {
@@ -205,6 +210,169 @@ class TestFetchDocument:
 
         with pytest.raises(DocsClientError):
             _fetch_document(service, "doc-id")
+
+
+class TestExtractTextChunks:
+    """Tests for the pure paragraph-chunk extraction helper used for range lookup."""
+
+    def test_extracts_one_chunk_per_paragraph_with_its_start_index(self) -> None:
+        """Each paragraph becomes a chunk carrying its structural startIndex."""
+        document = {
+            "body": {
+                "content": [
+                    {
+                        "startIndex": 1,
+                        "paragraph": {
+                            "elements": [{"textRun": {"content": "Big News!\n"}}],
+                        },
+                    },
+                    {
+                        "startIndex": 11,
+                        "paragraph": {
+                            "elements": [
+                                {"textRun": {"content": "Our new feature helps "}},
+                                {"textRun": {"content": "you.\n"}},
+                            ],
+                        },
+                    },
+                ]
+            }
+        }
+
+        chunks = _extract_text_chunks(document)
+
+        assert chunks == [
+            _TextChunk(start_index=1, text="Big News!\n"),
+            _TextChunk(start_index=11, text="Our new feature helps you.\n"),
+        ]
+
+    def test_skips_structural_elements_without_a_paragraph(self) -> None:
+        """Non-paragraph structural elements (e.g. section breaks) are skipped."""
+        document = {
+            "body": {
+                "content": [
+                    {"startIndex": 1, "sectionBreak": {}},
+                    {
+                        "startIndex": 1,
+                        "paragraph": {
+                            "elements": [{"textRun": {"content": "After break.\n"}}],
+                        },
+                    },
+                ]
+            }
+        }
+
+        chunks = _extract_text_chunks(document)
+
+        assert chunks == [_TextChunk(start_index=1, text="After break.\n")]
+
+
+class TestLocateDocumentRange:
+    """Tests for locating a unique UTF-16 [start, end) range of matched text."""
+
+    def test_finds_the_range_of_a_unique_match(self) -> None:
+        """A unique match returns its start/end index within its paragraph."""
+        document = {
+            "body": {
+                "content": [
+                    {
+                        "startIndex": 1,
+                        "paragraph": {
+                            "elements": [{"textRun": {"content": "Big News!\n"}}],
+                        },
+                    },
+                ]
+            }
+        }
+
+        start, end = _locate_document_range(document, "News")
+
+        assert (start, end) == (1 + 4, 1 + 8)
+
+    def test_raises_text_not_found_error_when_text_is_absent(self) -> None:
+        """No occurrences anywhere in the document raises TextNotFoundError."""
+        document = {
+            "body": {
+                "content": [
+                    {
+                        "startIndex": 1,
+                        "paragraph": {
+                            "elements": [{"textRun": {"content": "Big News!\n"}}],
+                        },
+                    },
+                ]
+            }
+        }
+
+        with pytest.raises(TextNotFoundError):
+            _locate_document_range(document, "Nowhere")
+
+    def test_raises_ambiguous_match_error_for_a_repeated_match_within_one_paragraph(
+        self,
+    ) -> None:
+        """A match repeated within a single paragraph raises AmbiguousMatchError."""
+        document = {
+            "body": {
+                "content": [
+                    {
+                        "startIndex": 1,
+                        "paragraph": {
+                            "elements": [
+                                {"textRun": {"content": "great, great news\n"}}
+                            ],
+                        },
+                    },
+                ]
+            }
+        }
+
+        with pytest.raises(AmbiguousMatchError):
+            _locate_document_range(document, "great")
+
+    def test_raises_ambiguous_match_error_for_matches_across_paragraphs(self) -> None:
+        """A match repeated across separate paragraphs raises AmbiguousMatchError."""
+        document = {
+            "body": {
+                "content": [
+                    {
+                        "startIndex": 1,
+                        "paragraph": {
+                            "elements": [{"textRun": {"content": "Big news!\n"}}],
+                        },
+                    },
+                    {
+                        "startIndex": 11,
+                        "paragraph": {
+                            "elements": [{"textRun": {"content": "More news.\n"}}],
+                        },
+                    },
+                ]
+            }
+        }
+
+        with pytest.raises(AmbiguousMatchError):
+            _locate_document_range(document, "news")
+
+    def test_accounts_for_surrogate_pairs_preceding_the_match(self) -> None:
+        """UTF-16 surrogate pairs (e.g. emoji) before the match shift the index."""
+        # U+1F389 PARTY POPPER is a surrogate pair: 2 UTF-16 code units, 1 Python char.
+        document = {
+            "body": {
+                "content": [
+                    {
+                        "startIndex": 1,
+                        "paragraph": {
+                            "elements": [{"textRun": {"content": "\U0001f389 News\n"}}],
+                        },
+                    },
+                ]
+            }
+        }
+
+        start, end = _locate_document_range(document, "News")
+
+        # "\U0001f389" is 2 UTF-16 units, then a space (1 unit) before "News".
+        assert (start, end) == (1 + 3, 1 + 7)
 
 
 class TestGoogleDocsClientGetDocumentContent:
@@ -414,6 +582,174 @@ class TestLoadCredentials:
             _load_credentials(client_secret_path, token_path, ["scope"])
 
 
+_FAKE_DOCUMENT_WITH_INDICES = {
+    "title": "Q3 Launch Blog Draft",
+    "body": {
+        "content": [
+            {
+                "startIndex": 1,
+                "paragraph": {
+                    "elements": [{"textRun": {"content": "Big News!\n"}}],
+                    "paragraphStyle": {"namedStyleType": "HEADING_1"},
+                },
+            },
+            {
+                "startIndex": 11,
+                "paragraph": {
+                    "elements": [
+                        {"textRun": {"content": "Our new feature helps you.\n"}}
+                    ],
+                    "paragraphStyle": {"namedStyleType": "NORMAL_TEXT"},
+                },
+            },
+        ]
+    },
+}
+
+
+class TestGoogleDocsClientCreateSuggestion:
+    """Tests for GoogleDocsClient.create_suggestion."""
+
+    @pytest.fixture
+    def fake_service(self) -> MagicMock:
+        """A fake Docs API discovery service returning a fixed document."""
+        service = MagicMock()
+        service.documents.return_value.get.return_value.execute.return_value = (
+            _FAKE_DOCUMENT_WITH_INDICES
+        )
+        return service
+
+    @pytest.fixture
+    def client(self, fake_service: MagicMock) -> GoogleDocsClient:
+        """A GoogleDocsClient wired to the fake service."""
+        return GoogleDocsClient(service=fake_service)
+
+    def test_issues_a_batch_update_with_delete_and_insert_at_the_matched_range(
+        self, client: GoogleDocsClient, fake_service: MagicMock
+    ) -> None:
+        """A unique match is replaced via a delete-then-insert batchUpdate."""
+        client.create_suggestion("doc-id", "feature", "capability")
+
+        fake_service.documents.return_value.batchUpdate.assert_called_once_with(
+            documentId="doc-id",
+            body={
+                "requests": [
+                    {
+                        "deleteContentRange": {
+                            "range": {"startIndex": 19, "endIndex": 26}
+                        }
+                    },
+                    {"insertText": {"location": {"index": 19}, "text": "capability"}},
+                ]
+            },
+        )
+
+    def test_raises_text_not_found_error_without_calling_batch_update(
+        self, client: GoogleDocsClient, fake_service: MagicMock
+    ) -> None:
+        """A non-existent matched_text raises before any write is issued."""
+        with pytest.raises(TextNotFoundError):
+            client.create_suggestion("doc-id", "nowhere", "replacement")
+
+        fake_service.documents.return_value.batchUpdate.assert_not_called()
+
+    def test_raises_ambiguous_match_error_without_calling_batch_update(
+        self, client: GoogleDocsClient, fake_service: MagicMock
+    ) -> None:
+        """A non-unique matched_text raises before any write is issued."""
+        with pytest.raises(AmbiguousMatchError):
+            client.create_suggestion("doc-id", "e", "replacement")
+
+        fake_service.documents.return_value.batchUpdate.assert_not_called()
+
+    def test_wraps_batch_update_http_errors_as_docs_client_error(
+        self, client: GoogleDocsClient, fake_service: MagicMock
+    ) -> None:
+        """An HttpError from batchUpdate is wrapped as DocsClientError."""
+        batch_update = fake_service.documents.return_value.batchUpdate
+        batch_update.return_value.execute.side_effect = _make_http_error(500)
+
+        with pytest.raises(DocsClientError):
+            client.create_suggestion("doc-id", "feature", "capability")
+
+    def test_raises_document_not_found_error_when_document_does_not_exist(
+        self, fake_service: MagicMock
+    ) -> None:
+        """A 404 fetching the document propagates as DocumentNotFoundError."""
+        fake_service.documents.return_value.get.return_value.execute.side_effect = (
+            _make_http_error(404)
+        )
+        client = GoogleDocsClient(service=fake_service)
+
+        with pytest.raises(DocumentNotFoundError):
+            client.create_suggestion("doc-id", "feature", "capability")
+
+
+class TestGoogleDocsClientCreateInlineComment:
+    """Tests for GoogleDocsClient.create_inline_comment."""
+
+    @pytest.fixture
+    def fake_service(self) -> MagicMock:
+        """A fake Docs API discovery service returning a fixed document."""
+        service = MagicMock()
+        service.documents.return_value.get.return_value.execute.return_value = (
+            _FAKE_DOCUMENT_WITH_INDICES
+        )
+        return service
+
+    @pytest.fixture
+    def fake_drive_service(self) -> MagicMock:
+        """A fake Drive API discovery service."""
+        return MagicMock()
+
+    @pytest.fixture
+    def client(
+        self, fake_service: MagicMock, fake_drive_service: MagicMock
+    ) -> GoogleDocsClient:
+        """A GoogleDocsClient wired to both fake services."""
+        return GoogleDocsClient(service=fake_service, drive_service=fake_drive_service)
+
+    def test_creates_a_drive_comment_referencing_the_matched_text(
+        self, client: GoogleDocsClient, fake_drive_service: MagicMock
+    ) -> None:
+        """A unique match results in a Drive comments.create call."""
+        client.create_inline_comment("doc-id", "feature", "Consider rephrasing.")
+
+        fake_drive_service.comments.return_value.create.assert_called_once_with(
+            fileId="doc-id",
+            body={"content": 'Re: "feature"\n\nConsider rephrasing.'},
+            fields="id",
+        )
+
+    def test_raises_docs_client_error_when_no_drive_service_configured(
+        self, fake_service: MagicMock
+    ) -> None:
+        """Without a Drive service, the method raises rather than silently no-op."""
+        client = GoogleDocsClient(service=fake_service)
+
+        with pytest.raises(DocsClientError):
+            client.create_inline_comment("doc-id", "feature", "Consider rephrasing.")
+
+    def test_raises_text_not_found_error_without_calling_drive(
+        self, client: GoogleDocsClient, fake_drive_service: MagicMock
+    ) -> None:
+        """A non-existent matched_text raises before any comment is posted."""
+        with pytest.raises(TextNotFoundError):
+            client.create_inline_comment("doc-id", "nowhere", "Consider rephrasing.")
+
+        fake_drive_service.comments.return_value.create.assert_not_called()
+
+    def test_wraps_drive_http_errors_as_docs_client_error(
+        self, client: GoogleDocsClient, fake_drive_service: MagicMock
+    ) -> None:
+        """An HttpError from comments.create is wrapped as DocsClientError."""
+        create = fake_drive_service.comments.return_value.create
+        create.return_value.execute.side_effect = _make_http_error(500)
+
+        with pytest.raises(DocsClientError):
+            client.create_inline_comment("doc-id", "feature", "Consider rephrasing.")
+
+
 class TestGoogleDocsClientFromLocalCredentials:
     """Tests that from_local_credentials wires loaded credentials into build()."""
 
@@ -443,3 +779,32 @@ class TestGoogleDocsClientFromLocalCredentials:
         )
         mock_build.assert_called_once_with("docs", "v1", credentials=fake_creds)
         assert client._service is fake_service
+        assert client._drive_service is None
+
+    def test_also_builds_drive_v3_service_when_include_drive_is_true(
+        self, mocker: MockerFixture, tmp_path: Path
+    ) -> None:
+        """include_drive=True builds a second Drive v3 service with the same creds."""
+        fake_creds = MagicMock()
+        fake_docs_service = MagicMock()
+        fake_drive_service = MagicMock()
+        mocker.patch("verbatim.docs_client._load_credentials", return_value=fake_creds)
+        mock_build = mocker.patch(
+            "verbatim.docs_client.build",
+            side_effect=[fake_docs_service, fake_drive_service],
+        )
+        client_secret_path = tmp_path / "client_secret.json"
+        token_path = tmp_path / "token.json"
+
+        client = GoogleDocsClient.from_local_credentials(
+            client_secret_path=client_secret_path,
+            token_path=token_path,
+            include_drive=True,
+        )
+
+        assert mock_build.call_args_list == [
+            mocker.call("docs", "v1", credentials=fake_creds),
+            mocker.call("drive", "v3", credentials=fake_creds),
+        ]
+        assert client._service is fake_docs_service
+        assert client._drive_service is fake_drive_service

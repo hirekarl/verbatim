@@ -11,6 +11,10 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 DEFAULT_SCOPES = ["https://www.googleapis.com/auth/documents.readonly"]
+WRITE_SCOPES = [
+    "https://www.googleapis.com/auth/documents",
+    "https://www.googleapis.com/auth/drive.file",
+]
 
 
 class DocsClientError(Exception):
@@ -27,6 +31,14 @@ class DocumentNotFoundError(DocsClientError):
 
 class DocumentAccessDeniedError(DocsClientError):
     """Raised when a requested document exists but isn't shared (HTTP 403)."""
+
+
+class TextNotFoundError(DocsClientError):
+    """Raised when a suggestion/comment target substring isn't found in the doc."""
+
+
+class AmbiguousMatchError(DocsClientError):
+    """Raised when a suggestion/comment target substring isn't unique in the doc."""
 
 
 @dataclass(frozen=True)
@@ -130,6 +142,91 @@ def _extract_title_body_and_headings(
     return title, body_text, headings
 
 
+@dataclass(frozen=True)
+class _TextChunk:
+    """A single paragraph's text, anchored to its document-level start index."""
+
+    start_index: int
+    text: str
+
+
+def _extract_text_chunks(document: dict[str, Any]) -> list[_TextChunk]:
+    """Split a document's body into per-paragraph chunks for range lookup.
+
+    Args:
+        document: The raw JSON body returned by ``documents.get``.
+
+    Returns:
+        One chunk per paragraph, in document order, each carrying the UTF-16
+        ``startIndex`` of its enclosing structural element.
+    """
+    chunks: list[_TextChunk] = []
+    for structural_element in document.get("body", {}).get("content", []):
+        paragraph = structural_element.get("paragraph")
+        if paragraph is None:
+            continue
+
+        paragraph_text = "".join(
+            element.get("textRun", {}).get("content", "")
+            for element in paragraph.get("elements", [])
+        )
+        chunks.append(
+            _TextChunk(
+                start_index=structural_element.get("startIndex", 0),
+                text=paragraph_text,
+            )
+        )
+
+    return chunks
+
+
+def _utf16_length(text: str) -> int:
+    """Return the number of UTF-16 code units ``text`` occupies."""
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _locate_document_range(
+    document: dict[str, Any], matched_text: str
+) -> tuple[int, int]:
+    """Find the unique UTF-16 [start, end) range of ``matched_text`` in the document.
+
+    Searches each paragraph independently, so a match spanning a paragraph
+    break is not supported. Match offsets are converted from Python string
+    positions to UTF-16 code units so that surrogate pairs (e.g. emoji)
+    preceding a match don't throw off the resulting index.
+
+    Args:
+        document: The raw JSON body returned by ``documents.get``.
+        matched_text: The exact substring to locate.
+
+    Returns:
+        The ``(start_index, end_index)`` UTF-16 range of the match.
+
+    Raises:
+        TextNotFoundError: ``matched_text`` appears nowhere in the document.
+        AmbiguousMatchError: ``matched_text`` appears more than once.
+    """
+    found: list[tuple[int, int]] = []
+    match_length = _utf16_length(matched_text)
+
+    for chunk in _extract_text_chunks(document):
+        search_from = 0
+        while (offset := chunk.text.find(matched_text, search_from)) != -1:
+            prefix_length = _utf16_length(chunk.text[:offset])
+            start = chunk.start_index + prefix_length
+            found.append((start, start + match_length))
+            search_from = offset + 1
+
+    if not found:
+        raise TextNotFoundError(f"Text not found in document: {matched_text!r}")
+    if len(found) > 1:
+        raise AmbiguousMatchError(
+            f"Text appears {len(found)} times in document, must be unique: "
+            f"{matched_text!r}"
+        )
+    return found[0]
+
+
 def _load_credentials(
     client_secret_path: Path, token_path: Path, scopes: list[str]
 ) -> Credentials:
@@ -188,14 +285,18 @@ def _load_credentials(
 class GoogleDocsClient:
     """A thin, read-side wrapper around the Google Docs API v1 client."""
 
-    def __init__(self, service: Any) -> None:
-        """Wrap an already-authenticated Docs API discovery service.
+    def __init__(self, service: Any, drive_service: Any | None = None) -> None:
+        """Wrap already-authenticated Docs (and optionally Drive) discovery services.
 
         Args:
             service: A Docs API v1 discovery ``Resource``, as returned by
                 ``googleapiclient.discovery.build("docs", "v1", ...)``.
+            drive_service: A Drive API v3 discovery ``Resource``, required
+                only for ``create_inline_comment`` (comments are a Drive
+                resource, not a Docs one). Omit if only reading/suggesting.
         """
         self._service = service
+        self._drive_service = drive_service
 
     @classmethod
     def from_local_credentials(
@@ -203,6 +304,7 @@ class GoogleDocsClient:
         client_secret_path: Path | None = None,
         token_path: Path | None = None,
         scopes: list[str] | None = None,
+        include_drive: bool = False,
     ) -> "GoogleDocsClient":
         """Build a client using locally cached/obtained OAuth credentials.
 
@@ -213,10 +315,15 @@ class GoogleDocsClient:
             token_path: Path to cache the obtained/refreshed token at.
                 Defaults to ``token.json`` in the current working directory.
             scopes: OAuth scopes to request. Defaults to
-                ``DEFAULT_SCOPES`` (read-only document access).
+                ``DEFAULT_SCOPES`` (read-only document access). Pass
+                ``WRITE_SCOPES`` for ``create_suggestion``/
+                ``create_inline_comment`` support.
+            include_drive: Also build a Drive API v3 service from the same
+                credentials, required for ``create_inline_comment``.
 
         Returns:
-            A GoogleDocsClient backed by an authenticated Docs API v1 service.
+            A GoogleDocsClient backed by an authenticated Docs API v1 service
+            (and a Drive API v3 service, if ``include_drive`` is set).
         """
         resolved_client_secret_path = client_secret_path or Path("client_secret.json")
         resolved_token_path = token_path or Path("token.json")
@@ -225,7 +332,10 @@ class GoogleDocsClient:
             resolved_client_secret_path, resolved_token_path, resolved_scopes
         )
         service = build("docs", "v1", credentials=credentials)
-        return cls(service=service)
+        drive_service = (
+            build("drive", "v3", credentials=credentials) if include_drive else None
+        )
+        return cls(service=service, drive_service=drive_service)
 
     def get_document_content(self, document_id: str) -> DocumentContent:
         """Fetch and parse the audited document's content.
@@ -263,3 +373,90 @@ class GoogleDocsClient:
             body_text=body_text,
             headings=headings,
         )
+
+    def create_suggestion(
+        self, document_id: str, matched_text: str, replacement_text: str
+    ) -> None:
+        """Propose a suggested edit replacing an exact substring of the document.
+
+        Whether this lands as a Google Docs "suggestion" (advisory, must be
+        accepted) versus a direct edit depends on the OAuth principal's
+        sharing role on the document (Commenter/Suggester vs. Editor) — the
+        Docs API has no explicit suggestion-mode request flag.
+
+        Args:
+            document_id: The Google Docs document ID to edit.
+            matched_text: The exact, unique substring to replace.
+            replacement_text: The text to replace it with.
+
+        Raises:
+            TextNotFoundError: ``matched_text`` doesn't appear in the document.
+            AmbiguousMatchError: ``matched_text`` appears more than once.
+            DocsClientError: The document fetch or batch update failed.
+        """
+        document = _fetch_document(self._service, document_id)
+        start, end = _locate_document_range(document, matched_text)
+        body = {
+            "requests": [
+                {
+                    "deleteContentRange": {
+                        "range": {"startIndex": start, "endIndex": end}
+                    }
+                },
+                {
+                    "insertText": {
+                        "location": {"index": start},
+                        "text": replacement_text,
+                    }
+                },
+            ]
+        }
+        try:
+            self._service.documents().batchUpdate(
+                documentId=document_id, body=body
+            ).execute()
+        except HttpError as err:
+            raise DocsClientError(
+                f"Failed to create suggestion in document: {document_id}"
+            ) from err
+
+    def create_inline_comment(
+        self, document_id: str, matched_text: str, comment: str
+    ) -> None:
+        """Attach an explanatory comment referencing an exact document substring.
+
+        Comments on a Drive-hosted file are a Drive API v3 resource, not a
+        Docs API one, so this requires a Drive service to have been supplied
+        at construction time. The comment isn't anchored to a precise text
+        range in the Drive UI (Drive's ``anchor`` field uses an unconfirmed,
+        largely undocumented JSON micro-schema) — instead, ``matched_text``
+        is quoted in the comment body so the copywriter can find it.
+
+        Args:
+            document_id: The Google Docs (Drive file) ID to comment on.
+            matched_text: The exact, unique substring this comment refers to.
+            comment: The explanatory comment body.
+
+        Raises:
+            DocsClientError: No Drive service was configured, or the document
+                fetch/comment creation failed.
+            TextNotFoundError: ``matched_text`` doesn't appear in the document.
+            AmbiguousMatchError: ``matched_text`` appears more than once.
+        """
+        if self._drive_service is None:
+            raise DocsClientError(
+                "create_inline_comment requires a Drive API service - construct "
+                "GoogleDocsClient with drive_service or "
+                "from_local_credentials(include_drive=True)."
+            )
+        document = _fetch_document(self._service, document_id)
+        _locate_document_range(document, matched_text)
+        body = {"content": f'Re: "{matched_text}"\n\n{comment}'}
+        try:
+            self._drive_service.comments().create(
+                fileId=document_id, body=body, fields="id"
+            ).execute()
+        except HttpError as err:
+            raise DocsClientError(
+                f"Failed to create comment on document: {document_id}"
+            ) from err
