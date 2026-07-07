@@ -82,10 +82,12 @@ class BrandGuidelinesEvaluator:
             if " " in word:
                 # Replace literal spaces with \s+ to match any whitespace
                 escaped_word = escaped_word.replace(r"\ ", r"\s+")
-            # Use negative lookbehind/lookahead to exclude hyphenated compounds
+            # Use a negative lookbehind to exclude words preceded by a hyphen.
             # This prevents "old" from matching in "3-year-old" while still
-            # catching "old" in "old people" (ageist language)
-            pattern = r"(?<!-)\b" + escaped_word + r"\b(?!-)"
+            # catching "old" in "old people" and in "old-fashioned" (only the
+            # trailing side of a compound should be excluded, not the leading
+            # side - a \b boundary already exists on both sides of a hyphen).
+            pattern = r"(?<!-)\b" + escaped_word + r"\b"
             matches = re.finditer(pattern, text, re.IGNORECASE)
 
             for match in matches:

@@ -271,6 +271,25 @@ class TestBrandGuidelinesEvaluator:
                 f"hyphenated compound: '{text}'"
             )
 
+    def test_hyphen_first_compounds_still_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that banned words leading a hyphenated compound are still flagged."""
+        test_cases = [
+            "We prefer the old-fashioned approach.",
+            "This has an old-school vibe.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            old_violations = [
+                v
+                for v in violations
+                if v.category == "banned_words_and_competitors"
+                and "old" in v.message.lower()
+            ]
+            assert len(old_violations) == 1, f"Expected 'old' to be flagged in '{text}'"
+
     def test_standalone_banned_words_still_flagged(
         self, evaluator: BrandGuidelinesEvaluator
     ) -> None:
