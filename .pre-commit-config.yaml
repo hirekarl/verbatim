@@ -37,6 +37,11 @@ repos:
         entry: uv run mdformat --wrap no
         language: system
         types: [markdown]
+      - id: forbid-claude-coauthor-trailer
+        name: Forbid Claude/Anthropic Co-Authored-By trailer
+        language: pygrep
+        entry: "(?i)Co-Authored-By:.*(claude|anthropic)"
+        stages: [commit-msg]
 
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v4.1.1
