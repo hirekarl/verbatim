@@ -12,6 +12,7 @@ Verbatim is an AI agent that reviews draft marketing copy inside Google Docs aga
 - [Common commands](#common-commands)
 - [Development workflow](#development-workflow)
 - [Google Docs API setup](#google-docs-api-setup)
+- [Agent (OpenRouter) setup](#agent-openrouter-setup)
 - [Project structure](#project-structure)
 - [Versioning](#versioning)
 - [License](#license)
@@ -103,8 +104,10 @@ locally:
 
 1. Create or select a project in the
    [Google Cloud Console](https://console.cloud.google.com/).
-2. Enable the **Google Docs API** for that project (the Drive API will be needed
-   later, for Day 2's inline comments — not required yet).
+2. Enable both the **Google Docs API** and the **Google Drive API** for that
+   project — reading a document only needs the Docs API, but posting inline
+   comments (`GoogleDocsClient.create_inline_comment`) goes through the Drive API
+   instead (comments are a Drive resource, not a Docs one).
 3. Configure the OAuth consent screen as **External**, in **Testing** mode, and add
    your own Google account as a test user.
 4. Create an OAuth Client ID of type **Desktop app** — this matters, since the
@@ -116,10 +119,35 @@ locally:
 6. Run anything that calls `GoogleDocsClient.from_local_credentials()`. The first
    run opens a browser consent prompt; afterward, a `token.json` is cached locally
    (also git-ignored) so you won't be prompted again until it expires or the
-   requested scopes change.
+   requested scopes change. Read-only checks use the default scopes; to also post
+   suggestions/comments, pass `scopes=WRITE_SCOPES, include_drive=True`. For a
+   suggestion to land as a reviewable "Suggested edit" (rather than a silent direct
+   edit), the authenticated account needs Commenter/Suggester — not Editor — access
+   on the target document.
 
 See `.knowledge-base/google-docs-api/` and `.knowledge-base/google-drive-api/` for
 decomposed reference docs on the underlying REST APIs.
+
+## Agent (OpenRouter) setup
+
+`src/verbatim/llm_client.py` runs the audit conversation through
+[OpenRouter](https://openrouter.ai/)'s OpenAI-compatible chat completions API.
+
+1. Create an OpenRouter account and generate an API key.
+2. Copy `.env.example` to `.env` and fill in your key:
+
+   ```sh
+   cp .env.example .env
+   ```
+
+   `OpenRouterClient.from_env(...)` loads `.env` automatically (it's git-ignored —
+   never commit it). Alternatively, export the variable in your shell instead:
+
+   ```sh
+   export OPENROUTER_API_KEY="sk-or-..."
+   ```
+
+   On Windows PowerShell: `$env:OPENROUTER_API_KEY = "sk-or-..."`.
 
 ## Project structure
 
@@ -131,16 +159,23 @@ verbatim/
 │       └── ci.yml          # lint, type-check, and test on every PR and push to main
 ├── src/verbatim/           # the installable package
 │   ├── __init__.py
-│   ├── py.typed
 │   ├── evaluator.py        # BrandGuidelinesEvaluator: checks text against brand rules
 │   ├── brand_guidelines.py # loader for brand_guidelines.json
-│   ├── docs_client.py      # Google Docs API auth + read-side tool wrappers
+│   ├── agent.py            # single-pass tool-calling agent loop
+│   ├── docs_client.py      # Google Docs/Drive API auth + read/write tool wrappers
+│   ├── llm_client.py       # OpenRouter chat-completions client
+│   ├── prompt.py           # system prompt assembly + tool schemas
+│   ├── py.typed
 │   └── data/
 │       └── brand_guidelines.json  # brand voice/style rules fixture
 ├── tests/                  # pytest suite
-│   └── test_docs_client.py
+│   ├── test_agent.py
+│   ├── test_docs_client.py
+│   ├── test_llm_client.py
+│   └── test_prompt.py
 ├── .knowledge-base/        # decomposed reference docs for external APIs (map-and-leaf)
 ├── docs/                   # PRD and research reference docs (.docx + Markdown snapshots)
+├── .env.example            # OPENROUTER_API_KEY template; copy to .env (git-ignored)
 ├── BOOTSTRAPPING.md        # scaffolding rationale and remaining setup work
 ├── CLAUDE.md               # project context for AI coding agents
 ├── LICENSE                 # MIT
