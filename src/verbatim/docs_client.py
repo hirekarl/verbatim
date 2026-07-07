@@ -40,6 +40,23 @@ class DocumentContent:
     headings: list[Heading]
 
 
+@dataclass(frozen=True)
+class CampaignContext:
+    """The parsed content of a campaign brief document.
+
+    Structurally identical to DocumentContent today, but kept as a distinct
+    type: no sample brief exists yet to design a parsed-field schema
+    (audience/channel/CTA requirements/goals) against, so this type is a seam
+    for that to be added later without touching DocumentContent or any call
+    site that consumes it.
+    """
+
+    document_id: str
+    title: str
+    body_text: str
+    headings: list[Heading]
+
+
 def _fetch_document(service: Any, document_id: str) -> dict[str, Any]:
     """Fetch a document's raw JSON via the Docs API, mapping HTTP errors.
 
@@ -131,6 +148,25 @@ class GoogleDocsClient:
         title, body_text, headings = _extract_title_body_and_headings(document)
         return DocumentContent(
             document_id=document_id,
+            title=title,
+            body_text=body_text,
+            headings=headings,
+        )
+
+    def get_campaign_context(self, brief_id: str) -> CampaignContext:
+        """Fetch and parse the campaign brief document's content.
+
+        Args:
+            brief_id: The Google Docs document ID of the campaign brief (a
+                document distinct from the one being audited).
+
+        Returns:
+            The brief's title, body text, and headings.
+        """
+        document = _fetch_document(self._service, brief_id)
+        title, body_text, headings = _extract_title_body_and_headings(document)
+        return CampaignContext(
+            document_id=brief_id,
             title=title,
             body_text=body_text,
             headings=headings,

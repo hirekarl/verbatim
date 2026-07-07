@@ -6,6 +6,7 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from verbatim.docs_client import (
+    CampaignContext,
     DocsClientError,
     DocumentAccessDeniedError,
     DocumentContent,
@@ -253,3 +254,44 @@ class TestGoogleDocsClientGetDocumentContent:
 
         with pytest.raises(DocumentNotFoundError):
             client.get_document_content("doc-id")
+
+
+class TestGoogleDocsClientGetCampaignContext:
+    """Tests for GoogleDocsClient.get_campaign_context."""
+
+    @pytest.fixture
+    def fake_service(self) -> MagicMock:
+        """A fake Docs API discovery service returning a fixed brief document."""
+        service = MagicMock()
+        service.documents.return_value.get.return_value.execute.return_value = (
+            _FAKE_DOCUMENT_JSON
+        )
+        return service
+
+    @pytest.fixture
+    def client(self, fake_service: MagicMock) -> GoogleDocsClient:
+        """A GoogleDocsClient wired to the fake service."""
+        return GoogleDocsClient(service=fake_service)
+
+    def test_returns_campaign_context_with_title_body_and_headings(
+        self, client: GoogleDocsClient
+    ) -> None:
+        """The parsed brief document is returned as a CampaignContext."""
+        context = client.get_campaign_context("brief-id")
+
+        assert context == CampaignContext(
+            document_id="brief-id",
+            title="Q3 Launch Blog Draft",
+            body_text="Big News!\nOur new feature helps you.\n",
+            headings=[Heading(level=1, text="Big News!\n")],
+        )
+
+    def test_calls_documents_get_with_the_given_brief_id(
+        self, client: GoogleDocsClient, fake_service: MagicMock
+    ) -> None:
+        """The brief document ID passed in is forwarded to the underlying API call."""
+        client.get_campaign_context("brief-id")
+
+        fake_service.documents.return_value.get.assert_called_once_with(
+            documentId="brief-id"
+        )
