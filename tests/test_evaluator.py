@@ -200,6 +200,6 @@ class TestBrandGuidelinesEvaluator:
                 if v.category == "banned_words_and_competitors"
                 and "crushing it" in v.message.lower()
             ]
-            assert (
-                len(banned_violations) == 1
-            ), f"Failed to detect 'crushing it' with varied whitespace: {text!r}"
+            assert len(banned_violations) == 1, (
+                f"Failed to detect 'crushing it' with varied whitespace: {text!r}"
+            )
