@@ -30,6 +30,16 @@ class Heading:
     text: str
 
 
+@dataclass(frozen=True)
+class DocumentContent:
+    """The parsed content of an audited marketing-copy document."""
+
+    document_id: str
+    title: str
+    body_text: str
+    headings: list[Heading]
+
+
 def _fetch_document(service: Any, document_id: str) -> dict[str, Any]:
     """Fetch a document's raw JSON via the Docs API, mapping HTTP errors.
 
@@ -94,3 +104,34 @@ def _extract_title_body_and_headings(
             headings.append(Heading(level=level, text=paragraph_text))
 
     return title, body_text, headings
+
+
+class GoogleDocsClient:
+    """A thin, read-side wrapper around the Google Docs API v1 client."""
+
+    def __init__(self, service: Any) -> None:
+        """Wrap an already-authenticated Docs API discovery service.
+
+        Args:
+            service: A Docs API v1 discovery ``Resource``, as returned by
+                ``googleapiclient.discovery.build("docs", "v1", ...)``.
+        """
+        self._service = service
+
+    def get_document_content(self, document_id: str) -> DocumentContent:
+        """Fetch and parse the audited document's content.
+
+        Args:
+            document_id: The Google Docs document ID being audited.
+
+        Returns:
+            The document's title, body text, and headings.
+        """
+        document = _fetch_document(self._service, document_id)
+        title, body_text, headings = _extract_title_body_and_headings(document)
+        return DocumentContent(
+            document_id=document_id,
+            title=title,
+            body_text=body_text,
+            headings=headings,
+        )

@@ -8,11 +8,35 @@ from googleapiclient.errors import HttpError
 from verbatim.docs_client import (
     DocsClientError,
     DocumentAccessDeniedError,
+    DocumentContent,
     DocumentNotFoundError,
+    GoogleDocsClient,
     Heading,
     _extract_title_body_and_headings,
     _fetch_document,
 )
+
+_FAKE_DOCUMENT_JSON = {
+    "title": "Q3 Launch Blog Draft",
+    "body": {
+        "content": [
+            {
+                "paragraph": {
+                    "elements": [{"textRun": {"content": "Big News!\n"}}],
+                    "paragraphStyle": {"namedStyleType": "HEADING_1"},
+                }
+            },
+            {
+                "paragraph": {
+                    "elements": [
+                        {"textRun": {"content": "Our new feature helps you.\n"}}
+                    ],
+                    "paragraphStyle": {"namedStyleType": "NORMAL_TEXT"},
+                }
+            },
+        ]
+    },
+}
 
 
 def _make_http_error(status: int) -> HttpError:
@@ -176,3 +200,56 @@ class TestFetchDocument:
 
         with pytest.raises(DocsClientError):
             _fetch_document(service, "doc-id")
+
+
+class TestGoogleDocsClientGetDocumentContent:
+    """Tests for GoogleDocsClient.get_document_content."""
+
+    @pytest.fixture
+    def fake_service(self) -> MagicMock:
+        """A fake Docs API discovery service returning a fixed document."""
+        service = MagicMock()
+        service.documents.return_value.get.return_value.execute.return_value = (
+            _FAKE_DOCUMENT_JSON
+        )
+        return service
+
+    @pytest.fixture
+    def client(self, fake_service: MagicMock) -> GoogleDocsClient:
+        """A GoogleDocsClient wired to the fake service."""
+        return GoogleDocsClient(service=fake_service)
+
+    def test_returns_document_content_with_title_body_and_headings(
+        self, client: GoogleDocsClient
+    ) -> None:
+        """The parsed document is returned as a DocumentContent."""
+        content = client.get_document_content("doc-id")
+
+        assert content == DocumentContent(
+            document_id="doc-id",
+            title="Q3 Launch Blog Draft",
+            body_text="Big News!\nOur new feature helps you.\n",
+            headings=[Heading(level=1, text="Big News!\n")],
+        )
+
+    def test_calls_documents_get_with_the_given_document_id(
+        self, client: GoogleDocsClient, fake_service: MagicMock
+    ) -> None:
+        """The document ID passed in is forwarded to the underlying API call."""
+        client.get_document_content("doc-id")
+
+        fake_service.documents.return_value.get.assert_called_once_with(
+            documentId="doc-id"
+        )
+
+    def test_raises_document_not_found_error_on_http_404(
+        self, fake_service: MagicMock
+    ) -> None:
+        """A 404 from the underlying API surfaces as DocumentNotFoundError."""
+        fake_service.documents.return_value.get.return_value.execute.side_effect = (
+            _make_http_error(404)
+        )
+        client = GoogleDocsClient(service=fake_service)
+
+        with pytest.raises(DocumentNotFoundError):
+            client.get_document_content("doc-id")
