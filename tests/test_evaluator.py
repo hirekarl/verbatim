@@ -127,9 +127,9 @@ class TestBrandGuidelinesEvaluator:
                 if v.category == "formatting_and_style"
                 and "oxford comma" in v.message.lower()
             ]
-            assert (
-                len(oxford_violations) == 0
-            ), f"False positive for two-item conjunction: '{text}'"
+            assert len(oxford_violations) == 0, (
+                f"False positive for two-item conjunction: '{text}'"
+            )
 
     def test_violation_structure(self, evaluator: BrandGuidelinesEvaluator) -> None:
         """Test that violations have the expected structure."""
