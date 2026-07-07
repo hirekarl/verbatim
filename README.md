@@ -11,6 +11,7 @@ Verbatim is an AI agent that reviews draft marketing copy inside Google Docs aga
 - [Clone & bootstrap](#clone--bootstrap)
 - [Common commands](#common-commands)
 - [Development workflow](#development-workflow)
+- [Google Docs API setup](#google-docs-api-setup)
 - [Project structure](#project-structure)
 - [Versioning](#versioning)
 - [License](#license)
@@ -93,6 +94,33 @@ Run everything through `uv run` — there's no separate virtualenv to activate.
 
 This project follows **test-driven development**: write a failing test before writing the implementation code that makes it pass. Commit messages (and PR titles once this repo is on GitHub) follow the [Conventional Commits](https://www.conventionalcommits.org/) format (`feat: ...`, `fix: ...`, `chore: ...`, `docs: ...`) — the `commitizen` pre-commit hook enforces this locally, and `uv run cz commit` will build a properly formatted message for you.
 
+## Google Docs API setup
+
+`src/verbatim/docs_client.py` reads documents via the Google Docs API using an
+OAuth installed-app flow (not a service account — the copywriter checks their own
+currently-open document, so there's nothing to pre-share). One-time setup to run it
+locally:
+
+1. Create or select a project in the
+   [Google Cloud Console](https://console.cloud.google.com/).
+2. Enable the **Google Docs API** for that project (the Drive API will be needed
+   later, for Day 2's inline comments — not required yet).
+3. Configure the OAuth consent screen as **External**, in **Testing** mode, and add
+   your own Google account as a test user.
+4. Create an OAuth Client ID of type **Desktop app** — this matters, since the
+   installed-app flow's local redirect handling
+   (`InstalledAppFlow.run_local_server`) only works with this client type, not "Web
+   application."
+5. Download the client ID's JSON and save it as `client_secret.json` at the repo
+   root (already git-ignored — never commit it).
+6. Run anything that calls `GoogleDocsClient.from_local_credentials()`. The first
+   run opens a browser consent prompt; afterward, a `token.json` is cached locally
+   (also git-ignored) so you won't be prompted again until it expires or the
+   requested scopes change.
+
+See `.knowledge-base/google-docs-api/` and `.knowledge-base/google-drive-api/` for
+decomposed reference docs on the underlying REST APIs.
+
 ## Project structure
 
 ```text
@@ -106,10 +134,13 @@ verbatim/
 │   ├── py.typed
 │   ├── evaluator.py        # BrandGuidelinesEvaluator: checks text against brand rules
 │   ├── brand_guidelines.py # loader for brand_guidelines.json
+│   ├── docs_client.py      # Google Docs API auth + read-side tool wrappers
 │   └── data/
 │       └── brand_guidelines.json  # brand voice/style rules fixture
 ├── tests/                  # pytest suite
-├── docs/                   # PRD and research reference docs (.docx)
+│   └── test_docs_client.py
+├── .knowledge-base/        # decomposed reference docs for external APIs (map-and-leaf)
+├── docs/                   # PRD and research reference docs (.docx + Markdown snapshots)
 ├── BOOTSTRAPPING.md        # scaffolding rationale and remaining setup work
 ├── CLAUDE.md               # project context for AI coding agents
 ├── LICENSE                 # MIT
