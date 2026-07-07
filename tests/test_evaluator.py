@@ -11,7 +11,7 @@ class TestBrandGuidelinesEvaluator:
     @pytest.fixture
     def evaluator(self) -> BrandGuidelinesEvaluator:
         """Create an evaluator instance with the default guidelines."""
-        return BrandGuidelinesEvaluator("brand_guidelines.json")
+        return BrandGuidelinesEvaluator()
 
     def test_evaluator_loads_successfully(
         self, evaluator: BrandGuidelinesEvaluator
@@ -68,14 +68,35 @@ class TestBrandGuidelinesEvaluator:
         text = "We integrate with AT&T and Procter & Gamble."
         violations = evaluator.evaluate(text)
 
-        # Should not flag ampersands in known brand names
-        # For now, we'll implement simple heuristic: uppercase before & after
+        # Should not flag ampersands in known brand names (from allowlist)
         ampersand_violations = [
             v
             for v in violations
             if v.category == "formatting_and_style" and "ampersand" in v.message.lower()
         ]
         assert len(ampersand_violations) == 0
+
+    def test_ampersand_flags_title_case_non_brands(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that Title Case non-brands with ampersands are flagged."""
+        test_cases = [
+            "Please review our Terms & Conditions before signing.",
+            "Save Time & Money Today with our platform.",
+            "Check out our Data & Analytics dashboard.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            ampersand_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "ampersand" in v.message.lower()
+            ]
+            assert len(ampersand_violations) > 0, (
+                f"Expected to flag ampersand in Title Case phrase: '{text}'"
+            )
 
     def test_detect_oxford_comma_missing(
         self, evaluator: BrandGuidelinesEvaluator
@@ -117,6 +138,9 @@ class TestBrandGuidelinesEvaluator:
             "After launch, sales and marketing teams collaborate.",
             "For iOS, tap and hold the icon.",
             "By default, templates and automation are enabled.",
+            "Yesterday, John and Mary went to the store.",  # Karl's example
+            "Tomorrow, sales and marketing meet.",
+            "However, data and insights matter.",
         ]
 
         for text in test_cases:
@@ -130,6 +154,27 @@ class TestBrandGuidelinesEvaluator:
             assert len(oxford_violations) == 0, (
                 f"False positive for two-item conjunction: '{text}'"
             )
+
+    def test_oxford_comma_across_sentence_boundaries(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test Oxford comma violations caught after sentence boundaries."""
+        # This was a false negative due to too-wide lookback window
+        text = (
+            "The launch went well. Our platform offers templates, "
+            "automation and analytics."
+        )
+        violations = evaluator.evaluate(text)
+
+        oxford_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style"
+            and "oxford comma" in v.message.lower()
+        ]
+        assert len(oxford_violations) > 0, (
+            "Should flag missing Oxford comma in second sentence"
+        )
 
     def test_violation_structure(self, evaluator: BrandGuidelinesEvaluator) -> None:
         """Test that violations have the expected structure."""
@@ -179,6 +224,48 @@ class TestBrandGuidelinesEvaluator:
             and "leverage" in v.message.lower()
         ]
         assert len(banned_violations) == 0
+
+    def test_hyphenated_compounds_not_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that banned words in hyphenated compounds aren't flagged."""
+        # "old" is a banned word (ageist language) but shouldn't match in compounds
+        test_cases = [
+            "Our 3-year-old product line just got better.",
+            "This is a 5-year-old company with great values.",
+            "We have a brand-new approach.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            # Check that "old" is not flagged in hyphenated compounds
+            old_violations = [
+                v
+                for v in violations
+                if v.category == "banned_words_and_competitors"
+                and "old" in v.message.lower()
+            ]
+            assert len(old_violations) == 0, (
+                f"False positive: 'old' incorrectly flagged in "
+                f"hyphenated compound: '{text}'"
+            )
+
+    def test_standalone_banned_words_still_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that standalone banned words are still correctly flagged."""
+        # "old" should be flagged when used as standalone ageist language
+        text = "We don't hire old people or young developers."
+        violations = evaluator.evaluate(text)
+
+        banned_violations = [
+            v
+            for v in violations
+            if v.category == "banned_words_and_competitors"
+            and ("old" in v.message.lower() or "young" in v.message.lower())
+        ]
+        # Should flag both "old" and "young"
+        assert len(banned_violations) == 2
 
     def test_multi_word_banned_phrase_whitespace_normalization(
         self, evaluator: BrandGuidelinesEvaluator

@@ -1,15 +1,10 @@
 """Brand guidelines evaluator that checks text against brand rules."""
 
 import re
-
-# Import from the root-level brand_guidelines.py (temporary until migration)
-import sys
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from brand_guidelines import BrandGuidelines
+from verbatim.brand_guidelines import BrandGuidelines
 
 
 @dataclass
@@ -26,11 +21,12 @@ class Violation:
 class BrandGuidelinesEvaluator:
     """Evaluates text against brand guidelines and returns violations."""
 
-    def __init__(self, guidelines_path: str) -> None:
+    def __init__(self, guidelines_path: str | None = None) -> None:
         """Initialize the evaluator with brand guidelines.
 
         Args:
-            guidelines_path: Path to the brand_guidelines.json file
+            guidelines_path: Path to the brand_guidelines.json file. If None,
+                uses the default bundled guidelines.
         """
         self.guidelines = BrandGuidelines(guidelines_path)
 
@@ -86,7 +82,10 @@ class BrandGuidelinesEvaluator:
             if " " in word:
                 # Replace literal spaces with \s+ to match any whitespace
                 escaped_word = escaped_word.replace(r"\ ", r"\s+")
-            pattern = r"\b" + escaped_word + r"\b"
+            # Use negative lookbehind/lookahead to exclude hyphenated compounds
+            # This prevents "old" from matching in "3-year-old" while still
+            # catching "old" in "old people" (ageist language)
+            pattern = r"(?<!-)\b" + escaped_word + r"\b(?!-)"
             matches = re.finditer(pattern, text, re.IGNORECASE)
 
             for match in matches:
@@ -163,7 +162,7 @@ class BrandGuidelinesEvaluator:
         """Check for improper ampersand usage.
 
         Ampersands should only be used in company/brand names.
-        We use a heuristic: allow if surrounded by capital letters.
+        Uses an allowlist of known brand names for accurate detection.
 
         Args:
             text: The text to check
@@ -172,43 +171,53 @@ class BrandGuidelinesEvaluator:
             List of violations for improper ampersand usage
         """
         violations: list[Violation] = []
+        allowed_brands = self.guidelines.get_allowed_brand_names()
 
-        # Find all ampersands not in brand names
-        # Heuristic: flag & that isn't in a brand name pattern
-        # Brand patterns: "AT&T", "Procter & Gamble", "Ben & Jerry's"
+        # Normalize brand names for case-insensitive matching
+        # Keep track of original spacing variations
+        normalized_brands = []
+        for brand in allowed_brands:
+            # Normalize whitespace around ampersand: "A&B", "A & B", "A  &  B" all match
+            normalized = re.sub(r"\s*&\s*", "&", brand.lower())
+            normalized_brands.append(normalized)
+
+        # Find all ampersands
         matches = re.finditer(r"&", text)
 
         for match in matches:
             pos = match.start()
 
-            # Extract words before and after the ampersand
-            # Look back for the last word
+            # Extract a window of text around the ampersand to check for brand names
+            # Look back and forward far enough to catch multi-word brand names
             before_text = text[max(0, pos - 30) : pos]
             after_text = text[pos + 1 : min(len(text), pos + 31)]
 
-            # Get the word immediately before the &
-            words_before = before_text.split()
-            word_before = words_before[-1].rstrip("&") if words_before else ""
+            # Get the words immediately before and after the &
+            # Use word boundary regex to extract words without punctuation
+            words_before_match = re.findall(r"\b\w+\b", before_text)
+            words_after_match = re.findall(r"\b\w+\b", after_text)
 
-            # Get the word immediately after the &
-            words_after = after_text.split()
-            word_after = words_after[0].lstrip("&") if words_after else ""
+            # Build potential brand name phrases of varying lengths
+            # Check 1-word before/after (e.g., "AT&T"), 2-words (e.g., "Ben & Jerry's")
+            is_allowed_brand = False
+            for num_before in range(1, min(3, len(words_before_match) + 1)):
+                for num_after in range(1, min(3, len(words_after_match) + 1)):
+                    phrase_words = [
+                        *words_before_match[-num_before:],
+                        "&",
+                        *words_after_match[:num_after],
+                    ]
+                    phrase = " ".join(phrase_words)
+                    # Normalize whitespace around ampersand for matching
+                    phrase_normalized = re.sub(r"\s*&\s*", "&", phrase.lower())
 
-            # Heuristic: if both words start with capital letters, it's likely a brand
-            # Examples: "AT&T" (A and T), "Procter & Gamble" (P and G)
-            # Known limitation: Title-case non-brands like "Data & Analytics"
-            # will pass this check. Future improvement: use an allowlist of
-            # known brand names for more precise detection.
-            looks_like_brand = False
-            if (
-                word_before
-                and word_after
-                and word_before[0].isupper()
-                and word_after[0].isupper()
-            ):
-                looks_like_brand = True
+                    if phrase_normalized in normalized_brands:
+                        is_allowed_brand = True
+                        break
+                if is_allowed_brand:
+                    break
 
-            if not looks_like_brand:
+            if not is_allowed_brand:
                 violations.append(
                     Violation(
                         category="formatting_and_style",
@@ -245,36 +254,35 @@ class BrandGuidelinesEvaluator:
         matches = re.finditer(pattern, text)
 
         for match in matches:
-            # Check if this is a 3+ item list by analyzing the context
-            # The match includes the comma: ", item and item"
-            # For a 3+ item list, we expect to see list-like structure before
-
             start_pos = match.start()
 
-            # Look back to find the item before this comma
-            # We need to skip back past the comma and the word before it
-            lookback_start = max(0, start_pos - 80)
-            preceding_text = text[lookback_start:start_pos]
+            # Extract the current sentence by looking back to the last sentence boundary
+            # or the start of text, whichever comes first
+            sentence_start = 0
+            for boundary_pos in range(start_pos - 1, -1, -1):
+                if text[boundary_pos] in ".!?":
+                    sentence_start = boundary_pos + 1
+                    break
 
-            # Check if preceding text looks like a list or a clause boundary
-            # Clause indicators: starts with prep phrases, has sentence punct
-            sentence_boundary_pattern = r"[.!?]\s"
-            has_sentence_boundary = re.search(sentence_boundary_pattern, preceding_text)
+            # Get the text from sentence start to the match
+            current_sentence_prefix = text[sentence_start:start_pos].strip()
 
-            # Check for common clause-starting phrases that indicate
-            # this is NOT a list but a clause + conjunction
-            # E.g., "In 2020,", "After launch,", "For iOS,", "By default,"
+            # Check if this sentence starts with a clause-starting phrase
+            # that indicates a two-item conjunction rather than a list
+            # E.g., "In 2020, mobile and desktop" or "After launch, sales and marketing"
             clause_starters = (
-                r"\b(In|After|For|By|When|Since|Before|During|From)\s+[\w\s]+$"
+                r"^\s*(In|After|For|By|When|Since|Before|During|From|"
+                r"Yesterday|Today|Tomorrow|Meanwhile|However|Therefore|"
+                r"Thus|Hence|Otherwise|Nevertheless)\b"
             )
             looks_like_clause = re.search(
-                clause_starters, preceding_text, re.IGNORECASE
+                clause_starters, current_sentence_prefix, re.IGNORECASE
             )
 
-            # Only flag if no sentence boundary and doesn't look like a clause
+            # Only flag if it doesn't look like a clause-based two-item conjunction
             # This catches real lists like "templates, automation and analytics"
             # while avoiding "In 2020, mobile and desktop"
-            if not has_sentence_boundary and not looks_like_clause:
+            if not looks_like_clause:
                 violations.append(
                     Violation(
                         category="formatting_and_style",

@@ -5,8 +5,8 @@ from verbatim.evaluator import BrandGuidelinesEvaluator
 
 def main() -> None:
     """Run the evaluator on sample marketing copy."""
-    # Initialize the evaluator
-    evaluator = BrandGuidelinesEvaluator("brand_guidelines.json")
+    # Initialize the evaluator with default bundled guidelines
+    evaluator = BrandGuidelinesEvaluator()
 
     # Sample marketing copy with various issues
     sample_text = """

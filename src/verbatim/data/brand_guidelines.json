@@ -148,7 +148,18 @@
         "third-party": "Use hyphen for adjective (e.g., 'third-party tool'), two words for noun ('a third party').",
         "OK": "Always write capitalized as OK (never Ok or ok).",
         "WiFi": "Always write capitalized as WiFi (never Wifi or wifi)."
-      }
+      },
+      "allowed_brand_names": [
+        "AT&T",
+        "Procter & Gamble",
+        "Ben & Jerry's",
+        "Barnes & Noble",
+        "Johnson & Johnson",
+        "H&M",
+        "H&R Block",
+        "M&M's",
+        "S&P"
+      ]
     }
   }
 }
