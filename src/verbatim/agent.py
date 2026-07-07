@@ -1,14 +1,9 @@
 """Single-pass tool-calling agent loop for auditing a Google Doc."""
 
-import sys
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
-# Import from the root-level brand_guidelines.py (temporary until migration,
-# see CLAUDE.md). Mirrors the same hack used by verbatim.evaluator.
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from brand_guidelines import BrandGuidelines
+from verbatim.brand_guidelines import BrandGuidelines
 from verbatim.docs_client import DocsClientError, GoogleDocsClient
 from verbatim.llm_client import OpenRouterClient, ToolCall
 from verbatim.prompt import TOOL_SCHEMAS, build_system_prompt

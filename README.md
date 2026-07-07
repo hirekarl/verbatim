@@ -10,7 +10,7 @@ Verbatim is an AI agent that reviews draft marketing copy inside Google Docs aga
   - [Prerequisites](#prerequisites)
   - [macOS setup](#macos-setup)
   - [Windows setup](#windows-setup)
-  - [Clone \& bootstrap](#clone--bootstrap)
+  - [Clone & bootstrap](#clone--bootstrap)
   - [Common commands](#common-commands)
   - [Development workflow](#development-workflow)
   - [Google Docs API setup](#google-docs-api-setup)
@@ -99,55 +99,30 @@ This project follows **test-driven development**: write a failing test before wr
 
 ## Google Docs API setup
 
-`src/verbatim/docs_client.py` reads documents via the Google Docs API using an
-OAuth installed-app flow (not a service account — the copywriter checks their own
-currently-open document, so there's nothing to pre-share). One-time setup to run it
-locally:
+`src/verbatim/docs_client.py` reads documents via the Google Docs API using an OAuth installed-app flow (not a service account — the copywriter checks their own currently-open document, so there's nothing to pre-share). One-time setup to run it locally:
 
-1. Create or select a project in the
-   [Google Cloud Console](https://console.cloud.google.com/).
-2. Enable both the **Google Docs API** and the **Google Drive API** for that
-   project — reading a document only needs the Docs API, but posting inline
-   comments (`GoogleDocsClient.create_inline_comment`) goes through the Drive API
-   instead (comments are a Drive resource, not a Docs one).
-3. Configure the OAuth consent screen as **External**, in **Testing** mode, and add
-   your own Google account as a test user.
-4. Create an OAuth Client ID of type **Desktop app** — this matters, since the
-   installed-app flow's local redirect handling
-   (`InstalledAppFlow.run_local_server`) only works with this client type, not "Web
-   application."
-5. Download the client ID's JSON and save it as `client_secret.json` at the repo
-   root (already git-ignored — never commit it).
-6. Run anything that calls `GoogleDocsClient.from_local_credentials()`. The first
-   run opens a browser consent prompt; afterward, a `token.json` is cached locally
-   (also git-ignored) so you won't be prompted again until it expires or the
-   requested scopes change. Read-only checks use the default scopes; to also post
-   suggestions/comments, pass `scopes=WRITE_SCOPES, include_drive=True`. For a
-   suggestion to land as a reviewable "Suggested edit" (rather than a silent direct
-   edit), the authenticated account needs Commenter/Suggester — not Editor — access
-   on the target document.
-   `WRITE_SCOPES` requests full `drive` access rather than the narrower
-   `drive.file` — confirmed live that `drive.file` 404s on `comments.create` for
-   any doc the app didn't itself create/open (e.g. a doc opened by URL/link, which
-   is Verbatim's whole use case), regardless of the user's own access to that doc.
+1. Create or select a project in the [Google Cloud Console](https://console.cloud.google.com/).
+1. Enable both the **Google Docs API** and the **Google Drive API** for that project — reading a document only needs the Docs API, but posting inline comments (`GoogleDocsClient.create_inline_comment`) goes through the Drive API instead (comments are a Drive resource, not a Docs one).
+1. Configure the OAuth consent screen as **External**, in **Testing** mode, and add your own Google account as a test user.
+1. Create an OAuth Client ID of type **Desktop app** — this matters, since the installed-app flow's local redirect handling (`InstalledAppFlow.run_local_server`) only works with this client type, not "Web application."
+1. Download the client ID's JSON and save it as `client_secret.json` at the repo root (already git-ignored — never commit it).
+1. Run anything that calls `GoogleDocsClient.from_local_credentials()`. The first run opens a browser consent prompt; afterward, a `token.json` is cached locally (also git-ignored) so you won't be prompted again until it expires or the requested scopes change. Read-only checks use the default scopes; to also post suggestions/comments, pass `scopes=WRITE_SCOPES, include_drive=True`. For a suggestion to land as a reviewable "Suggested edit" (rather than a silent direct edit), the authenticated account needs Commenter/Suggester — not Editor — access on the target document. `WRITE_SCOPES` requests full `drive` access rather than the narrower `drive.file` — confirmed live that `drive.file` 404s on `comments.create` for any doc the app didn't itself create/open (e.g. a doc opened by URL/link, which is Verbatim's whole use case), regardless of the user's own access to that doc.
 
-See `.knowledge-base/google-docs-api/` and `.knowledge-base/google-drive-api/` for
-decomposed reference docs on the underlying REST APIs.
+See `.knowledge-base/google-docs-api/` and `.knowledge-base/google-drive-api/` for decomposed reference docs on the underlying REST APIs.
 
 ## Agent (OpenRouter) setup
 
-`src/verbatim/llm_client.py` runs the audit conversation through
-[OpenRouter](https://openrouter.ai/)'s OpenAI-compatible chat completions API.
+`src/verbatim/llm_client.py` runs the audit conversation through [OpenRouter](https://openrouter.ai/)'s OpenAI-compatible chat completions API.
 
 1. Create an OpenRouter account and generate an API key.
-2. Copy `.env.example` to `.env` and fill in your key:
+
+1. Copy `.env.example` to `.env` and fill in your key:
 
    ```sh
    cp .env.example .env
    ```
 
-   `OpenRouterClient.from_env(...)` loads `.env` automatically (it's git-ignored —
-   never commit it). Alternatively, export the variable in your shell instead:
+   `OpenRouterClient.from_env(...)` loads `.env` automatically (it's git-ignored — never commit it). Alternatively, export the variable in your shell instead:
 
    ```sh
    export OPENROUTER_API_KEY="sk-or-..."

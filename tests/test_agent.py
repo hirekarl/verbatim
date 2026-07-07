@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from brand_guidelines import BrandGuidelines
 from verbatim.agent import AgentRunResult, run_agent
+from verbatim.brand_guidelines import BrandGuidelines
 from verbatim.docs_client import (
     CampaignContext,
     DocumentContent,
@@ -43,7 +43,7 @@ def llm_client() -> MagicMock:
 @pytest.fixture
 def brand_guidelines() -> BrandGuidelines:
     """The real BrandGuidelines loaded from the repo's fixture file."""
-    return BrandGuidelines("brand_guidelines.json")
+    return BrandGuidelines()
 
 
 def _no_tool_calls_result(content: str = "Audit complete.") -> ChatCompletionResult:

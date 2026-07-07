@@ -70,10 +70,6 @@ module = [
 ]
 ignore_missing_imports = true
 
-[[tool.mypy.overrides]]
-module = "brand_guidelines"
-ignore_errors = true
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=src/verbatim --cov-report=term-missing --cov-report=xml --cov-fail-under=90"
