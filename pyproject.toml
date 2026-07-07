@@ -13,6 +13,8 @@ dependencies = [
     "google-api-python-client>=2.198.0",
     "google-auth-httplib2>=0.4.0",
     "google-auth-oauthlib>=1.4.0",
+    "openai>=2.44.0",
+    "python-dotenv>=1.2.2",
 ]
 
 [build-system]
