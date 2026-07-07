@@ -51,6 +51,10 @@ class BrandGuidelinesEvaluator:
         # Check formatting and style rules
         violations.extend(self._check_ampersands(text))
         violations.extend(self._check_oxford_comma(text))
+        violations.extend(self._check_semicolons(text))
+        violations.extend(self._check_exclamation_points(text))
+        violations.extend(self._check_double_spaces(text))
+        violations.extend(self._check_click_here_links(text))
 
         return violations
 
@@ -214,6 +218,138 @@ class BrandGuidelinesEvaluator:
                         message="Missing Oxford comma in list",
                         matched_text=match.group(),
                         suggestion=match.group().replace(" and ", ", and "),
+                    )
+                )
+
+        return violations
+
+    def _check_semicolons(self, text: str) -> list[Violation]:
+        """Check for semicolons in the text.
+
+        Brand guideline: Avoid semicolons. Simplify sentences, use an em dash
+        (—) without spaces, or start a new sentence instead.
+
+        Args:
+            text: The text to check
+
+        Returns:
+            List of violations for semicolons found
+        """
+        violations: list[Violation] = []
+
+        # Find all semicolons
+        matches = re.finditer(r";", text)
+
+        for _match in matches:
+            violations.append(
+                Violation(
+                    category="formatting_and_style",
+                    severity="warning",
+                    message="Avoid semicolons",
+                    matched_text=";",
+                    suggestion=(
+                        "Simplify sentence, use em dash (—), or start new sentence"
+                    ),
+                )
+            )
+
+        return violations
+
+    def _check_exclamation_points(self, text: str) -> list[Violation]:
+        """Check for multiple consecutive exclamation points.
+
+        Brand guideline: Use exclamation points sparingly, never more than one
+        at a time, and never in failure messages or alerts.
+
+        Args:
+            text: The text to check
+
+        Returns:
+            List of violations for multiple exclamation points
+        """
+        violations: list[Violation] = []
+
+        # Find patterns of 2 or more consecutive exclamation points
+        pattern = r"!{2,}"
+        matches = re.finditer(pattern, text)
+
+        for match in matches:
+            violations.append(
+                Violation(
+                    category="formatting_and_style",
+                    severity="warning",
+                    message="Use only one exclamation point at a time",
+                    matched_text=match.group(),
+                    suggestion="Use single exclamation point (!)",
+                )
+            )
+
+        return violations
+
+    def _check_double_spaces(self, text: str) -> list[Violation]:
+        """Check for multiple consecutive spaces.
+
+        Brand guideline: Leave exactly a single space between sentences
+        (never two spaces).
+
+        Args:
+            text: The text to check
+
+        Returns:
+            List of violations for multiple consecutive spaces
+        """
+        violations: list[Violation] = []
+
+        # Find patterns of 2 or more consecutive spaces
+        pattern = r" {2,}"
+        matches = re.finditer(pattern, text)
+
+        for match in matches:
+            violations.append(
+                Violation(
+                    category="formatting_and_style",
+                    severity="warning",
+                    message="Use only single spaces between words and sentences",
+                    matched_text=match.group(),
+                    suggestion="Use single space",
+                )
+            )
+
+        return violations
+
+    def _check_click_here_links(self, text: str) -> list[Violation]:
+        """Check for non-descriptive link text.
+
+        Brand guideline: Avoid 'Click here'; link descriptive keywords instead.
+        Do not link punctuation. Do not link preceding articles.
+
+        Args:
+            text: The text to check
+
+        Returns:
+            List of violations for non-descriptive link text
+        """
+        violations: list[Violation] = []
+
+        # Common non-descriptive link patterns
+        patterns = [
+            r"\bclick\s+here\b",
+            r"\bclick\s+this\b",
+            r"\bhere\b(?=\s+to|\s+for)",  # "here to" or "here for"
+            r"\bthis\s+link\b",
+            r"\bread\s+more\s+here\b",
+        ]
+
+        for pattern in patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                violations.append(
+                    Violation(
+                        category="formatting_and_style",
+                        severity="warning",
+                        message="Avoid non-descriptive link text like 'click here'",
+                        matched_text=match.group(),
+                        suggestion="Use descriptive keywords that indicate destination",
                     )
                 )
 

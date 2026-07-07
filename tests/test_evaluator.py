@@ -203,3 +203,136 @@ class TestBrandGuidelinesEvaluator:
             assert len(banned_violations) == 1, (
                 f"Failed to detect 'crushing it' with varied whitespace: {text!r}"
             )
+
+    def test_detect_semicolon(self, evaluator: BrandGuidelinesEvaluator) -> None:
+        """Test detection of semicolons."""
+        text = "We offer templates; they help you grow your business."
+        violations = evaluator.evaluate(text)
+
+        semicolon_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style" and "semicolon" in v.message.lower()
+        ]
+        assert len(semicolon_violations) > 0
+        assert semicolon_violations[0].matched_text == ";"
+
+    def test_no_semicolon_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that text without semicolons produces no semicolon violations."""
+        text = "We offer templates. They help you grow your business."
+        violations = evaluator.evaluate(text)
+
+        semicolon_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style" and "semicolon" in v.message.lower()
+        ]
+        assert len(semicolon_violations) == 0
+
+    def test_detect_multiple_exclamation_points(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test detection of multiple consecutive exclamation points."""
+        test_cases = [
+            ("Great work!!", 1),  # Two exclamation points
+            ("Amazing!!!", 1),  # Three exclamation points
+            ("Wow!! This is great!!", 2),  # Multiple violations
+        ]
+
+        for text, expected_count in test_cases:
+            violations = evaluator.evaluate(text)
+            exclamation_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "exclamation" in v.message.lower()
+            ]
+            assert len(exclamation_violations) == expected_count, (
+                f"Expected {expected_count} violations for {text!r}, "
+                f"got {len(exclamation_violations)}"
+            )
+
+    def test_single_exclamation_point_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that single exclamation points are allowed."""
+        text = "Great work! We're excited to launch this feature!"
+        violations = evaluator.evaluate(text)
+
+        exclamation_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style"
+            and "exclamation" in v.message.lower()
+        ]
+        assert len(exclamation_violations) == 0
+
+    def test_detect_double_spaces(self, evaluator: BrandGuidelinesEvaluator) -> None:
+        """Test detection of multiple consecutive spaces."""
+        test_cases = [
+            ("One sentence.  Another sentence.", 1),  # Double space
+            ("Text with   triple spaces.", 1),  # Triple space
+            ("Multiple  issues  here.", 2),  # Two violations
+        ]
+
+        for text, expected_count in test_cases:
+            violations = evaluator.evaluate(text)
+            space_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style" and "space" in v.message.lower()
+            ]
+            assert len(space_violations) == expected_count, (
+                f"Expected {expected_count} violations for {text!r}, "
+                f"got {len(space_violations)}"
+            )
+
+    def test_single_space_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that single spaces between words are allowed."""
+        text = "This is normal text. It has proper spacing."
+        violations = evaluator.evaluate(text)
+
+        space_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style" and "space" in v.message.lower()
+        ]
+        assert len(space_violations) == 0
+
+    def test_detect_click_here_links(self, evaluator: BrandGuidelinesEvaluator) -> None:
+        """Test detection of non-descriptive link text."""
+        test_cases = [
+            "Click here to learn more",
+            "Read more here about our features",
+            "Check out this link for details",
+            "Click this to get started",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            link_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style" and "link" in v.message.lower()
+            ]
+            assert len(link_violations) > 0, (
+                f"Expected to detect non-descriptive link in {text!r}"
+            )
+
+    def test_descriptive_link_text_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that descriptive link text produces no violations."""
+        text = "Read our documentation to learn about templates and automation."
+        violations = evaluator.evaluate(text)
+
+        link_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style" and "link" in v.message.lower()
+        ]
+        assert len(link_violations) == 0
