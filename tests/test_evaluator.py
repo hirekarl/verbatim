@@ -383,3 +383,80 @@ class TestBrandGuidelinesEvaluator:
             and "spelling" in v.message.lower()
         ]
         assert len(spelling_violations) == 0
+
+    def test_twitter_character_limit(self, evaluator: BrandGuidelinesEvaluator) -> None:
+        """Test detection of Twitter character limit violations."""
+        # Create text longer than 280 characters
+        long_text = "a" * 281
+        violations = evaluator.evaluate(long_text, channel="twitter")
+
+        channel_violations = [
+            v for v in violations if v.category == "channel_constraints"
+        ]
+        assert len(channel_violations) > 0
+        assert "280" in channel_violations[0].message
+
+    def test_twitter_within_limit_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that Twitter text within 280 chars produces no violation."""
+        text = "Check out our new features for better email marketing!"
+        violations = evaluator.evaluate(text, channel="twitter")
+
+        channel_violations = [
+            v for v in violations if v.category == "channel_constraints"
+        ]
+        assert len(channel_violations) == 0
+
+    def test_facebook_sentence_count(self, evaluator: BrandGuidelinesEvaluator) -> None:
+        """Test detection of Facebook verbosity violations."""
+        # More than 2 sentences
+        long_text = "First sentence. Second sentence. Third sentence. Fourth sentence."
+        violations = evaluator.evaluate(long_text, channel="facebook")
+
+        channel_violations = [
+            v for v in violations if v.category == "channel_constraints"
+        ]
+        assert len(channel_violations) > 0
+        assert (
+            "1-2" in channel_violations[0].message
+            or "sentence" in channel_violations[0].message.lower()
+        )
+
+    def test_no_channel_no_constraint_check(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that no channel constraints are checked without channel specified."""
+        long_text = "a" * 500  # Would violate Twitter, but no channel specified
+        violations = evaluator.evaluate(long_text)
+
+        channel_violations = [
+            v for v in violations if v.category == "channel_constraints"
+        ]
+        assert len(channel_violations) == 0
+
+    def test_instagram_sentence_count(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test detection of Instagram verbosity violations."""
+        # More than 1 sentence
+        long_text = "First sentence. Second sentence."
+        violations = evaluator.evaluate(long_text, channel="instagram")
+
+        channel_violations = [
+            v for v in violations if v.category == "channel_constraints"
+        ]
+        assert len(channel_violations) > 0
+        assert "1 sentence" in channel_violations[0].message.lower()
+
+    def test_instagram_within_limit_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that Instagram text with 1 sentence produces no violation."""
+        text = "Check out our new features!"
+        violations = evaluator.evaluate(text, channel="instagram")
+
+        channel_violations = [
+            v for v in violations if v.category == "channel_constraints"
+        ]
+        assert len(channel_violations) == 0

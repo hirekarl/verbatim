@@ -34,11 +34,13 @@ class BrandGuidelinesEvaluator:
         """
         self.guidelines = BrandGuidelines(guidelines_path)
 
-    def evaluate(self, text: str) -> list[Violation]:
+    def evaluate(self, text: str, channel: str | None = None) -> list[Violation]:
         """Evaluate text against all brand guidelines.
 
         Args:
             text: The text to evaluate
+            channel: Optional target channel (e.g., "twitter", "facebook",
+                    "instagram", "email") for channel-specific constraints
 
         Returns:
             List of violations found in the text
@@ -56,6 +58,10 @@ class BrandGuidelinesEvaluator:
         violations.extend(self._check_exclamation_points(text))
         violations.extend(self._check_double_spaces(text))
         violations.extend(self._check_click_here_links(text))
+
+        # Check channel-specific constraints if channel is specified
+        if channel:
+            violations.extend(self._check_channel_constraints(text, channel))
 
         return violations
 
@@ -408,6 +414,70 @@ class BrandGuidelinesEvaluator:
                         message="Avoid non-descriptive link text like 'click here'",
                         matched_text=match.group(),
                         suggestion="Use descriptive keywords that indicate destination",
+                    )
+                )
+
+        return violations
+
+    def _check_channel_constraints(self, text: str, channel: str) -> list[Violation]:
+        """Check for channel-specific constraint violations.
+
+        Different channels have different length and format requirements:
+        - Twitter: 280 character limit
+        - Facebook: 1-2 short sentences preferred
+        - Instagram: 1 sentence or short phrase
+
+        Args:
+            text: The text to check
+            channel: The target channel (e.g., "twitter", "facebook", "instagram")
+
+        Returns:
+            List of violations for channel constraint issues
+        """
+        violations: list[Violation] = []
+        channel_lower = channel.lower()
+
+        # Twitter: 280 character limit
+        if channel_lower == "twitter":
+            if len(text) > 280:
+                violations.append(
+                    Violation(
+                        category="channel_constraints",
+                        severity="error",
+                        message="Twitter posts must be 280 characters or less",
+                        matched_text=text[:50] + "..." if len(text) > 50 else text,
+                        suggestion=f"Reduce from {len(text)} to 280 characters",
+                    )
+                )
+
+        # Facebook: 1-2 short sentences
+        elif channel_lower == "facebook":
+            # Split on sentence-ending punctuation
+            sentences = [s.strip() for s in re.split(r"[.!?]+", text) if s.strip()]
+            if len(sentences) > 2:
+                violations.append(
+                    Violation(
+                        category="channel_constraints",
+                        severity="warning",
+                        message="Facebook posts should be 1-2 short sentences",
+                        matched_text=text[:50] + "..." if len(text) > 50 else text,
+                        suggestion=f"Reduce from {len(sentences)} to 1-2 sentences",
+                    )
+                )
+
+        # Instagram: 1 sentence or short phrase
+        elif channel_lower == "instagram":
+            sentences = [s.strip() for s in re.split(r"[.!?]+", text) if s.strip()]
+            if len(sentences) > 1:
+                violations.append(
+                    Violation(
+                        category="channel_constraints",
+                        severity="warning",
+                        message="Instagram posts should be 1 sentence or short phrase",
+                        matched_text=text[:50] + "..." if len(text) > 50 else text,
+                        suggestion=(
+                            f"Reduce to single sentence (currently {len(sentences)})"
+                        ),
                     )
                 )
 
