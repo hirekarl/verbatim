@@ -104,6 +104,10 @@ locally, and `uv run cz commit` will build a properly formatted message for you.
 
 ```text
 verbatim/
+├── .github/
+│   ├── CODEOWNERS
+│   └── workflows/
+│       └── ci.yml          # lint, type-check, and test on every PR and push to main
 ├── src/verbatim/           # the installable package
 │   ├── __init__.py
 │   └── py.typed
@@ -113,6 +117,7 @@ verbatim/
 ├── brand_guidelines.py     # loader for brand_guidelines.json
 ├── BOOTSTRAPPING.md        # scaffolding rationale and remaining setup work
 ├── CLAUDE.md               # project context for AI coding agents
+├── LICENSE                 # MIT
 ├── pyproject.toml          # project metadata + all tool configuration
 └── uv.lock                 # pinned dependency versions
 ```
@@ -125,4 +130,4 @@ that plan. Until then, there's no manual version bump step to worry about.
 
 ## License
 
-MIT.
+[MIT](LICENSE).
