@@ -54,6 +54,11 @@ class BrandGuidelinesEvaluator:
         violations.extend(self._check_exclamation_points(text))
         violations.extend(self._check_double_spaces(text))
         violations.extend(self._check_click_here_links(text))
+        violations.extend(self._check_quotation_marks(text))
+        violations.extend(self._check_gender_neutral_terms(text))
+        violations.extend(self._check_mailchimp_capitalization(text))
+        violations.extend(self._check_number_formatting(text))
+        violations.extend(self._check_race_heritage_capitalization(text))
 
         # Check channel-specific constraints if channel is specified
         if channel:
@@ -463,6 +468,348 @@ class BrandGuidelinesEvaluator:
                     message="Avoid non-descriptive link text like 'click here'",
                     matched_text=match.group(),
                     suggestion="Use descriptive keywords that indicate destination",
+                )
+            )
+
+        return violations
+
+    def _check_race_heritage_capitalization(self, text: str) -> list[Violation]:
+        """Check for race and heritage capitalization standards.
+
+        Brand guidelines:
+        - Standardize dual heritage references without hyphens
+          (e.g., 'Asian American', not 'Asian-American')
+        - Capitalize 'Black' when referring to people in the African diaspora,
+          but keep 'white' lowercase
+
+        Args:
+            text: The text to check
+
+        Returns:
+            List of violations for race/heritage capitalization issues
+        """
+        violations: list[Violation] = []
+
+        # Common dual heritage terms that should not be hyphenated
+        heritage_patterns = [
+            (r"\bAsian-American\b", "Asian American"),
+            (r"\bAfrican-American\b", "African American"),
+            (r"\bMexican-American\b", "Mexican American"),
+            (r"\bNative-American\b", "Native American"),
+            (r"\bLatin-American\b", "Latin American"),
+            (r"\bItalian-American\b", "Italian American"),
+            (r"\bIrish-American\b", "Irish American"),
+        ]
+
+        for pattern, correct_form in heritage_patterns:
+            matches = re.finditer(pattern, text)
+            for match in matches:
+                violations.append(
+                    Violation(
+                        category="formatting_and_style",
+                        severity="warning",
+                        message=(
+                            "Remove hyphen from dual heritage references "
+                            "(use 'Asian American', not 'Asian-American')"
+                        ),
+                        matched_text=match.group(),
+                        suggestion=correct_form,
+                    )
+                )
+
+        # Check for lowercase 'black' when likely referring to race/people
+        # Pattern matches 'black' when followed by words like communities,
+        # people, entrepreneurs, etc.
+        black_pattern = (
+            r"\bblack\s+(communities|people|entrepreneurs|individuals|"
+            r"Americans|families|businesses|leaders|voices|experiences|culture)"
+        )
+        matches = re.finditer(black_pattern, text, re.IGNORECASE)
+
+        for match in matches:
+            if match.group().startswith("black"):  # lowercase 'black'
+                violations.append(
+                    Violation(
+                        category="formatting_and_style",
+                        severity="warning",
+                        message=(
+                            "Capitalize 'Black' when referring to people "
+                            "in the African diaspora"
+                        ),
+                        matched_text=match.group(),
+                        suggestion=match.group().replace("black", "Black", 1),
+                    )
+                )
+
+        # Check for uppercase 'White' when referring to race
+        # Pattern matches 'White' when followed by race-related context words
+        white_pattern = (
+            r"\bWhite\s+(communities|people|entrepreneurs|individuals|"
+            r"Americans|families|businesses|leaders|voices|experiences|culture)"
+        )
+        matches = re.finditer(white_pattern, text)
+
+        for match in matches:
+            violations.append(
+                Violation(
+                    category="formatting_and_style",
+                    severity="warning",
+                    message="Use lowercase 'white' when referring to race",
+                    matched_text=match.group(),
+                    suggestion=match.group().replace("White", "white", 1),
+                )
+            )
+
+        return violations
+
+    def _check_number_formatting(self, text: str) -> list[Violation]:
+        """Check for incorrect number and time formatting.
+
+        Brand guidelines:
+        - Use commas for numbers over 3 digits (1,000)
+        - Time: Use numeral + space + lowercase am/pm (7 am, 7:30 pm)
+
+        Args:
+            text: The text to check
+
+        Returns:
+            List of violations for number formatting issues
+        """
+        violations: list[Violation] = []
+
+        # Check for numbers >= 1000 without commas
+        # Pattern matches 4+ digit numbers that don't already have commas
+        # Negative lookahead (?![,\d]) prevents matching if followed by comma
+        # or more digits. Negative lookbehind prevents partial matches.
+        pattern_number = r"(?<!\d)([1-9]\d{3,})(?![,\d])"
+        matches = re.finditer(pattern_number, text)
+
+        for match in matches:
+            number_str = match.group()
+            # Format with commas
+            formatted = f"{int(number_str):,}"
+
+            violations.append(
+                Violation(
+                    category="formatting_and_style",
+                    severity="warning",
+                    message="Use commas for numbers over 999",
+                    matched_text=number_str,
+                    suggestion=formatted,
+                )
+            )
+
+        # Check for time formatting issues
+        # Pattern 1: Time without space before am/pm (3pm, 7:30PM)
+        pattern_time_no_space = r"\b(\d{1,2}(?::\d{2})?)(am|pm|AM|PM)\b"
+        matches = re.finditer(pattern_time_no_space, text)
+
+        for match in matches:
+            time_part = match.group(1)
+            am_pm_part = match.group(2).lower()
+
+            violations.append(
+                Violation(
+                    category="formatting_and_style",
+                    severity="warning",
+                    message="Time should have space before am/pm and be lowercase",
+                    matched_text=match.group(),
+                    suggestion=f"{time_part} {am_pm_part}",
+                )
+            )
+
+        # Pattern 2: Time with uppercase AM/PM (but with space)
+        pattern_time_uppercase = r"\b(\d{1,2}(?::\d{2})?)\s+(AM|PM)\b"
+        matches = re.finditer(pattern_time_uppercase, text)
+
+        for match in matches:
+            time_part = match.group(1)
+            am_pm_part = match.group(2).lower()
+
+            violations.append(
+                Violation(
+                    category="formatting_and_style",
+                    severity="warning",
+                    message="Use lowercase am/pm for times",
+                    matched_text=match.group(),
+                    suggestion=f"{time_part} {am_pm_part}",
+                )
+            )
+
+        return violations
+
+    def _check_mailchimp_capitalization(self, text: str) -> list[Violation]:
+        """Check for incorrect Mailchimp brand name capitalization.
+
+        Brand guideline: Always write company name as 'Mailchimp'
+        (capital M, lowercase c). Do not use 'The Rocket Science Group'
+        unless in legal documents.
+
+        Args:
+            text: The text to check
+
+        Returns:
+            List of violations for incorrect Mailchimp capitalization
+        """
+        violations: list[Violation] = []
+
+        # Patterns for incorrect Mailchimp spellings
+        incorrect_patterns = [
+            (r"\bMailChimp\b", "Mailchimp", "Old spelling with capital C"),
+            (r"\bmailchimp\b", "Mailchimp", "All lowercase"),
+            (r"\bMAILCHIMP\b", "Mailchimp", "All uppercase"),
+            (r"\bMail\s+Chimp\b", "Mailchimp", "Two words instead of one"),
+        ]
+
+        for pattern, correct_form, reason in incorrect_patterns:
+            matches = re.finditer(pattern, text)
+            for match in matches:
+                violations.append(
+                    Violation(
+                        category="formatting_and_style",
+                        severity="warning",
+                        message=f"Incorrect Mailchimp capitalization: {reason}",
+                        matched_text=match.group(),
+                        suggestion=correct_form,
+                    )
+                )
+
+        return violations
+
+    def _check_gender_neutral_terms(self, text: str) -> list[Violation]:
+        """Check for gendered terms that should be gender-neutral.
+
+        Brand guidelines:
+        - Use gender-neutral terms instead of gendered ones
+        - Do not call groups 'guys' or women 'girls'
+        - Use singular 'they/them' if gender is unknown
+
+        Args:
+            text: The text to check
+
+        Returns:
+            List of violations for gendered language
+        """
+        violations: list[Violation] = []
+
+        # Mapping of gendered terms to gender-neutral alternatives
+        gendered_terms = {
+            r"\bwaitress\b": ("server", "waitstaff"),
+            r"\bwaiter\b": ("server", "waitstaff"),
+            r"\bbusinessman\b": ("businessperson", "business professional"),
+            r"\bbusinesswoman\b": ("businessperson", "business professional"),
+            r"\bchairman\b": ("chair", "chairperson"),
+            r"\bchairwoman\b": ("chair", "chairperson"),
+            r"\bpoliceman\b": ("police officer", None),
+            r"\bpolicewoman\b": ("police officer", None),
+            r"\bfireman\b": ("firefighter", None),
+            r"\bfirewoman\b": ("firefighter", None),
+            r"\bsteward\b": ("flight attendant", None),
+            r"\bstewardess\b": ("flight attendant", None),
+            r"\bmailman\b": ("mail carrier", "postal worker"),
+            r"\bsalesman\b": ("salesperson", "sales representative"),
+            r"\bsaleswoman\b": ("salesperson", "sales representative"),
+            r"\bsportsman\b": ("athlete", "sports enthusiast"),
+            r"\bsportswoman\b": ("athlete", "sports enthusiast"),
+            r"\bmanpower\b": ("workforce", "personnel"),
+            r"\bmankind\b": ("humankind", "humanity"),
+        }
+
+        for pattern, (primary_suggestion, alt_suggestion) in gendered_terms.items():
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                suggestion = primary_suggestion
+                if alt_suggestion:
+                    suggestion = f"{primary_suggestion} or {alt_suggestion}"
+
+                violations.append(
+                    Violation(
+                        category="formatting_and_style",
+                        severity="warning",
+                        message="Use gender-neutral terms",
+                        matched_text=match.group(),
+                        suggestion=suggestion,
+                    )
+                )
+
+        # Check for "guys" when referring to groups
+        # Pattern matches common uses like "hey guys", "thanks guys", "you guys"
+        guys_pattern = r"\b(hey|hi|thank(?:s)?|you)\s+guys\b"
+        matches = re.finditer(guys_pattern, text, re.IGNORECASE)
+        for match in matches:
+            violations.append(
+                Violation(
+                    category="formatting_and_style",
+                    severity="warning",
+                    message="Avoid using 'guys' for groups; use gender-neutral terms",
+                    matched_text=match.group(),
+                    suggestion="Use 'everyone', 'team', 'folks', or 'all'",
+                )
+            )
+
+        # Check for "girls" when referring to adult women
+        # Pattern matches "the girls" as a group reference
+        girls_pattern = r"\bthe\s+girls\b"
+        matches = re.finditer(girls_pattern, text, re.IGNORECASE)
+        for match in matches:
+            violations.append(
+                Violation(
+                    category="formatting_and_style",
+                    severity="warning",
+                    message=(
+                        "Avoid using 'girls' to refer to adult women; "
+                        "use 'women' instead"
+                    ),
+                    matched_text=match.group(),
+                    suggestion="Use 'the women' or 'the team'",
+                )
+            )
+
+        return violations
+
+    def _check_quotation_marks(self, text: str) -> list[Violation]:
+        """Check for incorrect quotation mark punctuation placement.
+
+        Brand guideline: Periods and commas go inside quotation marks.
+        Question marks go inside quotes only if part of the quote.
+
+        Args:
+            text: The text to check
+
+        Returns:
+            List of violations for quotation mark punctuation issues
+        """
+        violations: list[Violation] = []
+
+        # Pattern 1: Period outside closing quote: "word".
+        # Matches: "text". or "text".  (with optional space after period)
+        pattern_period = r'"([^"]+)"\s*\.'
+        matches = re.finditer(pattern_period, text)
+
+        for match in matches:
+            violations.append(
+                Violation(
+                    category="formatting_and_style",
+                    severity="warning",
+                    message="Period should go inside quotation marks",
+                    matched_text=match.group(),
+                    suggestion=match.group().replace('".', '."'),
+                )
+            )
+
+        # Pattern 2: Comma outside closing quote: "word",
+        # Matches: "text", or "text",  (with optional space after comma)
+        pattern_comma = r'"([^"]+)"\s*,'
+        matches = re.finditer(pattern_comma, text)
+
+        for match in matches:
+            violations.append(
+                Violation(
+                    category="formatting_and_style",
+                    severity="warning",
+                    message="Comma should go inside quotation marks",
+                    matched_text=match.group(),
+                    suggestion=match.group().replace('",', ',"'),
                 )
             )
 

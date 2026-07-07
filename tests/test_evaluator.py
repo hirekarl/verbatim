@@ -700,3 +700,319 @@ class TestBrandGuidelinesEvaluator:
             v for v in violations if v.category == "channel_constraints"
         ]
         assert len(channel_violations) == 0
+
+    def test_quotation_mark_period_outside_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test detection of periods outside quotation marks."""
+        test_cases = [
+            'She said "hello". Then she left.',
+            'The feature is called "automation". It saves time.',
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            quote_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "quotation" in v.message.lower()
+            ]
+            assert len(quote_violations) > 0, f"Should flag: {text}"
+
+    def test_quotation_mark_comma_outside_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test detection of commas outside quotation marks."""
+        test_cases = [
+            'She said "hello", then waved.',
+            'The option is "advanced", which means premium.',
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            quote_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "quotation" in v.message.lower()
+            ]
+            assert len(quote_violations) > 0, f"Should flag: {text}"
+
+    def test_quotation_mark_correct_placement_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that correct quotation mark placement produces no violations."""
+        test_cases = [
+            'She said "hello."',
+            'She said "hello," and smiled.',
+            'The feature is called "automation."',
+            'Did she say "hello?"',  # Question mark inside (part of quote)
+            'Did she say "hello"?',  # Question mark outside (not part of quote)
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            quote_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "quotation" in v.message.lower()
+            ]
+            assert len(quote_violations) == 0, f"Should not flag: {text}"
+
+    def test_gendered_terms_flagged(self, evaluator: BrandGuidelinesEvaluator) -> None:
+        """Test detection of gendered terms that should be gender-neutral."""
+        test_cases = [
+            ("The waitress brought our order.", "server"),
+            ("She's a businesswoman in tech.", "businessperson"),
+            ("He works as a policeman.", "police officer"),
+            ("The chairman called the meeting.", "chair"),
+            ("Ask the stewardess for assistance.", "flight attendant"),
+        ]
+
+        for text, _expected_suggestion in test_cases:
+            violations = evaluator.evaluate(text)
+            gender_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "gender-neutral" in v.message.lower()
+            ]
+            assert len(gender_violations) > 0, f"Should flag gendered term in: {text}"
+
+    def test_guys_for_mixed_groups_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test detection of 'guys' used for mixed-gender groups."""
+        test_cases = [
+            "Hey guys, welcome to the team!",
+            "Thanks guys for your feedback.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            gender_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and ("guys" in v.message.lower() or "gender" in v.message.lower())
+            ]
+            assert len(gender_violations) > 0, f"Should flag 'guys' in: {text}"
+
+    def test_girls_for_adult_women_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test detection of 'girls' used to refer to adult women."""
+        test_cases = [
+            "The girls in marketing did a great job.",
+            "She went out with the girls last night.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            gender_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style" and "girls" in v.message.lower()
+            ]
+            assert len(gender_violations) > 0, f"Should flag 'girls' in: {text}"
+
+    def test_gender_neutral_terms_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that gender-neutral terms produce no violations."""
+        test_cases = [
+            "The server brought our order.",
+            "She's a businessperson in tech.",
+            "They work as a police officer.",
+            "The chair called the meeting.",
+            "Everyone on the team contributed.",
+            "The flight attendant provided assistance.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            gender_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "gender" in v.message.lower()
+            ]
+            assert len(gender_violations) == 0, f"Should not flag: {text}"
+
+    def test_mailchimp_capitalization_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test detection of incorrect Mailchimp capitalization."""
+        test_cases = [
+            "MailChimp is our platform.",  # Old spelling
+            "mailchimp helps you grow.",  # All lowercase
+            "MAILCHIMP is powerful.",  # All uppercase
+            "Mail Chimp saves time.",  # Two words
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            mailchimp_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "mailchimp" in v.message.lower()
+            ]
+            assert len(mailchimp_violations) > 0, f"Should flag: {text}"
+
+    def test_correct_mailchimp_spelling_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that correct Mailchimp spelling produces no violations."""
+        test_cases = [
+            "Mailchimp is our platform.",
+            "Use Mailchimp to grow your business.",
+            "Send better email with Mailchimp.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            mailchimp_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "mailchimp" in v.message.lower()
+            ]
+            assert len(mailchimp_violations) == 0, f"Should not flag: {text}"
+
+    def test_number_comma_separator_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test detection of numbers over 999 without comma separators."""
+        test_cases = [
+            "We sent 5000 emails.",
+            "The campaign reached 15000 people.",
+            "Over 1000 users signed up.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            number_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style" and "comma" in v.message.lower()
+            ]
+            assert len(number_violations) > 0, (
+                f"Should flag number without comma: {text}"
+            )
+
+    def test_time_formatting_flagged(self, evaluator: BrandGuidelinesEvaluator) -> None:
+        """Test detection of incorrect time formatting."""
+        test_cases = [
+            "The webinar starts at 3pm.",  # Missing space
+            "Join us at 7:30PM today.",  # Uppercase AM/PM
+            "Office hours: 9AM-5PM",  # Uppercase and no spaces
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            time_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style" and "time" in v.message.lower()
+            ]
+            assert len(time_violations) > 0, f"Should flag time format in: {text}"
+
+    def test_correct_number_formatting_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that correct number formatting produces no violations."""
+        test_cases = [
+            "We sent 5,000 emails.",
+            "The campaign reached 15,000 people.",
+            "Join us at 7 pm today.",
+            "Office hours: 9 am to 5 pm",
+            "The meeting is at 3:30 pm.",
+            "We have 999 subscribers.",  # Under 1000, no comma needed
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            number_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and ("number" in v.message.lower() or "time" in v.message.lower())
+            ]
+            assert len(number_violations) == 0, f"Should not flag: {text}"
+
+    def test_hyphenated_dual_heritage_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test detection of hyphenated dual heritage references."""
+        test_cases = [
+            "Our Asian-American community is vibrant.",
+            "The African-American experience is central to our story.",
+            "Mexican-American entrepreneurs are thriving.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            heritage_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "heritage" in v.message.lower()
+            ]
+            assert len(heritage_violations) > 0, f"Should flag hyphen in: {text}"
+
+    def test_lowercase_black_flagged(self, evaluator: BrandGuidelinesEvaluator) -> None:
+        """Test detection of lowercase 'black' when referring to people."""
+        test_cases = [
+            "We serve black communities.",
+            "Support for black entrepreneurs is essential.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            race_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and ("black" in v.message.lower() or "race" in v.message.lower())
+            ]
+            assert len(race_violations) > 0, f"Should flag lowercase 'black' in: {text}"
+
+    def test_uppercase_white_flagged(self, evaluator: BrandGuidelinesEvaluator) -> None:
+        """Test detection of uppercase 'White' when referring to race."""
+        test_cases = [
+            "White communities and Black communities working together.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            race_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and ("white" in v.message.lower() or "race" in v.message.lower())
+            ]
+            assert len(race_violations) > 0, f"Should flag uppercase 'White' in: {text}"
+
+    def test_correct_race_heritage_capitalization_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that correct race/heritage capitalization produces no violations."""
+        test_cases = [
+            "Our Asian American community is vibrant.",
+            "Black entrepreneurs are thriving.",
+            "Support for Black and white communities.",
+            "Mexican American heritage is celebrated.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            race_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and ("heritage" in v.message.lower() or "race" in v.message.lower())
+            ]
+            assert len(race_violations) == 0, f"Should not flag: {text}"
