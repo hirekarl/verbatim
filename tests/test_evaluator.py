@@ -179,3 +179,27 @@ class TestBrandGuidelinesEvaluator:
             and "leverage" in v.message.lower()
         ]
         assert len(banned_violations) == 0
+
+    def test_multi_word_banned_phrase_whitespace_normalization(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that multi-word banned phrases match with varied whitespace."""
+        # Test with different whitespace variations (newlines, multiple spaces)
+        test_cases = [
+            "We're crushing it with sales!",  # Normal space
+            "We're crushing  it with sales!",  # Multiple spaces
+            "We're crushing\nit with sales!",  # Newline
+            "We're crushing\t it with sales!",  # Tab + space
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            banned_violations = [
+                v
+                for v in violations
+                if v.category == "banned_words_and_competitors"
+                and "crushing it" in v.message.lower()
+            ]
+            assert (
+                len(banned_violations) == 1
+            ), f"Failed to detect 'crushing it' with varied whitespace: {text!r}"

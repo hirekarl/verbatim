@@ -6,6 +6,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from brand_guidelines import BrandGuidelines
@@ -16,7 +17,7 @@ class Violation:
     """Represents a single brand guideline violation."""
 
     category: str
-    severity: str  # 'error', 'warning', or 'info'
+    severity: Literal["error", "warning", "info"]
     message: str
     matched_text: str
     suggestion: str | None = None
@@ -68,7 +69,13 @@ class BrandGuidelinesEvaluator:
         for word in banned_words:
             # Use word boundaries to avoid partial matches
             # Case-insensitive matching
-            pattern = r"\b" + re.escape(word) + r"\b"
+            # For multi-word phrases, normalize whitespace to match any sequence
+            # (spaces, line breaks, tabs) to catch Google Docs line-wrapped text
+            escaped_word = re.escape(word)
+            if " " in word:
+                # Replace literal spaces with \s+ to match any whitespace
+                escaped_word = escaped_word.replace(r"\ ", r"\s+")
+            pattern = r"\b" + escaped_word + r"\b"
             matches = re.finditer(pattern, text, re.IGNORECASE)
 
             for match in matches:
@@ -121,6 +128,9 @@ class BrandGuidelinesEvaluator:
 
             # Heuristic: if both words start with capital letters, it's likely a brand
             # Examples: "AT&T" (A and T), "Procter & Gamble" (P and G)
+            # Known limitation: Title-case non-brands like "Data & Analytics"
+            # will pass this check. Future improvement: use an allowlist of
+            # known brand names for more precise detection.
             looks_like_brand = False
             if (
                 word_before

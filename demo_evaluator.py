@@ -1,6 +1,6 @@
 """Demo script showing how to use the BrandGuidelinesEvaluator."""
 
-from src.verbatim.evaluator import BrandGuidelinesEvaluator
+from verbatim.evaluator import BrandGuidelinesEvaluator
 
 
 def main() -> None:
