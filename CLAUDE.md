@@ -19,7 +19,7 @@ Quality gates: ruff (strict lint + format), mypy (strict), pytest/pytest-cov
 
 - `uv run pytest`
 - `uv run ruff check .` / `uv run ruff format .`
-- `uv run mypy src`
+- `uv run mypy`
 - `uv run pre-commit run --all-files`
 - `uv run cz commit`
 

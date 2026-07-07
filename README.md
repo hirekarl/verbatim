@@ -87,7 +87,7 @@ Run everything through `uv run` — there's no separate virtualenv to activate.
 | `uv run pytest` | Run the test suite with coverage |
 | `uv run ruff check .` | Lint the code |
 | `uv run ruff format .` | Auto-format the code |
-| `uv run mypy src` | Type-check the code |
+| `uv run mypy` | Type-check the code |
 | `uv run pre-commit run --all-files` | Run every pre-commit hook against the whole repo |
 | `uv run cz commit` | Build a Conventional Commits-formatted commit message interactively |
 
