@@ -6,10 +6,12 @@ future Apps Script Add-on calls over HTTPS via UrlFetchApp.
 """
 
 import os
+import secrets
 from typing import Annotated
 
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
@@ -20,6 +22,7 @@ from verbatim.llm_client import LLMClientError, OpenRouterClient
 from verbatim.token_validator import validate_access_token
 
 DEFAULT_MODEL = "google/gemini-2.5-flash"
+BACKEND_SECRET_HEADER = "X-Backend-Shared-Secret"
 
 _STATUS_BY_ERROR: dict[type[Exception], int] = {
     AuthenticationError: 401,
@@ -30,8 +33,54 @@ _STATUS_BY_ERROR: dict[type[Exception], int] = {
     KeyError: 400,
 }
 
-app = FastAPI(title="Verbatim Audit API")
 _bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def create_app() -> FastAPI:
+    """Build the Verbatim Audit API app.
+
+    Interactive docs (``/docs``, ``/redoc``, ``/openapi.json``) are enabled
+    by default for local dev, and disabled when ``VERBATIM_DISABLE_DOCS`` is
+    set -- an internet-reachable deployment shouldn't hand out a free map of
+    its API surface.
+
+    Returns:
+        A configured FastAPI app, not yet bound to a server.
+    """
+    docs_enabled = os.environ.get("VERBATIM_DISABLE_DOCS", "").lower() not in (
+        "1",
+        "true",
+        "yes",
+    )
+    return FastAPI(
+        title="Verbatim Audit API",
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
+    )
+
+
+app = create_app()
+
+
+def _get_expected_backend_secret() -> str:
+    """Load the shared secret inbound requests must present, from the environment.
+
+    Loads a `.env` file first, if one is present, mirroring
+    `OpenRouterClient.from_env`'s environment-loading behavior.
+
+    Returns:
+        The configured BACKEND_SHARED_SECRET value.
+
+    Raises:
+        RuntimeError: BACKEND_SHARED_SECRET is not set -- a server
+            misconfiguration, not something a caller can fix.
+    """
+    load_dotenv()
+    secret = os.environ.get("BACKEND_SHARED_SECRET")
+    if not secret:
+        raise RuntimeError("BACKEND_SHARED_SECRET environment variable is not set")
+    return secret
 
 
 class AuditRequest(BaseModel):
@@ -72,6 +121,9 @@ def audit(
     credentials: Annotated[
         HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)
     ],
+    x_backend_shared_secret: Annotated[
+        str | None, Header(alias=BACKEND_SECRET_HEADER)
+    ] = None,
 ) -> AuditResponse:
     """Run one audit pass over a Google Doc via a hosted Add-on backend.
 
@@ -79,16 +131,33 @@ def audit(
         request: The document/brief/channel/model to audit.
         credentials: The bearer token forwarded by the calling Add-on, via
             ``ScriptApp.getOAuthToken()`` on the Apps Script side.
+        x_backend_shared_secret: A static secret known to the Add-on and
+            this backend, checked before any Google API call is made --
+            a cheap first-line filter against internet scanning/probing,
+            independent of the (more expensive) tokeninfo check below.
 
     Returns:
         The audit run's outcome (suggestions/comments made, cap status).
 
     Raises:
-        HTTPException: 401 if the Authorization header is missing/malformed
-            or the bearer token fails tokeninfo validation, or mapped from
-            any DocsClientError/LLMClientError/FileNotFoundError/
-            ValueError/KeyError raised during the run.
+        HTTPException: 401 if the shared secret or Authorization header is
+            missing/invalid, or the bearer token fails tokeninfo
+            validation; 500 if the backend itself is misconfigured; or
+            mapped from any DocsClientError/LLMClientError/
+            FileNotFoundError/ValueError/KeyError raised during the run.
     """
+    try:
+        expected_secret = _get_expected_backend_secret()
+    except RuntimeError as err:
+        raise HTTPException(status_code=500, detail=str(err)) from err
+
+    if not x_backend_shared_secret or not secrets.compare_digest(
+        x_backend_shared_secret, expected_secret
+    ):
+        raise HTTPException(
+            status_code=401, detail="Invalid or missing backend shared secret"
+        )
+
     if credentials is None:
         raise HTTPException(
             status_code=401, detail="Missing or invalid Authorization header"

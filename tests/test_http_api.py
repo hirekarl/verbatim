@@ -9,18 +9,28 @@ from pytest_mock import MockerFixture
 
 from verbatim.agent import AgentRunResult
 from verbatim.docs_client import AuthenticationError, DocsClientError
-from verbatim.http_api import app
+from verbatim.http_api import BACKEND_SECRET_HEADER, app, create_app
 from verbatim.llm_client import LLMClientError
 from verbatim.token_validator import TokenValidationError
+
+_TEST_SHARED_SECRET = "test-shared-secret"
 
 
 class TestAuditEndpoint:
     """Tests for the POST /audit HTTP entrypoint."""
 
+    @pytest.fixture(autouse=True)
+    def _shared_secret_env(
+        self, monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture
+    ) -> None:
+        """Configure a known BACKEND_SHARED_SECRET for these tests."""
+        mocker.patch("verbatim.http_api.load_dotenv")
+        monkeypatch.setenv("BACKEND_SHARED_SECRET", _TEST_SHARED_SECRET)
+
     @pytest.fixture
     def client(self) -> TestClient:
-        """A FastAPI test client for the audit API."""
-        return TestClient(app)
+        """A FastAPI test client for the audit API, with a valid shared secret."""
+        return TestClient(app, headers={BACKEND_SECRET_HEADER: _TEST_SHARED_SECRET})
 
     @pytest.fixture
     def mock_run_agent(self, mocker: MockerFixture) -> MagicMock:
@@ -293,3 +303,74 @@ class TestAuditEndpoint:
         )
 
         assert response.status_code == 500
+
+    def test_audit_missing_shared_secret_header(
+        self, mock_docs_client: MagicMock
+    ) -> None:
+        """A request with no shared-secret header is rejected before anything else."""
+        client_without_default_headers = TestClient(app)
+
+        response = client_without_default_headers.post(
+            "/audit",
+            json={"document_id": "doc-id", "brief_id": "brief-id"},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+
+        assert response.status_code == 401
+        mock_docs_client.assert_not_called()
+
+    def test_audit_wrong_shared_secret_header(
+        self, client: TestClient, mock_docs_client: MagicMock
+    ) -> None:
+        """A request with the wrong shared secret is rejected before anything else."""
+        response = client.post(
+            "/audit",
+            json={"document_id": "doc-id", "brief_id": "brief-id"},
+            headers={
+                "Authorization": "Bearer fake-token",
+                BACKEND_SECRET_HEADER: "wrong-secret",
+            },
+        )
+
+        assert response.status_code == 401
+        mock_docs_client.assert_not_called()
+
+    def test_audit_shared_secret_misconfigured(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missing BACKEND_SHARED_SECRET config surfaces as a 500."""
+        monkeypatch.delenv("BACKEND_SHARED_SECRET", raising=False)
+
+        response = client.post(
+            "/audit",
+            json={"document_id": "doc-id", "brief_id": "brief-id"},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+
+        assert response.status_code == 500
+
+
+class TestCreateApp:
+    """Tests for the create_app() factory's docs-endpoint toggle."""
+
+    def test_docs_enabled_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """With VERBATIM_DISABLE_DOCS unset, the interactive docs stay enabled."""
+        monkeypatch.delenv("VERBATIM_DISABLE_DOCS", raising=False)
+
+        api = create_app()
+
+        assert api.docs_url == "/docs"
+        assert api.redoc_url == "/redoc"
+        assert api.openapi_url == "/openapi.json"
+
+    def test_docs_disabled_when_configured(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """VERBATIM_DISABLE_DOCS=1 turns off the interactive docs/schema routes."""
+        monkeypatch.setenv("VERBATIM_DISABLE_DOCS", "1")
+
+        api = create_app()
+
+        assert api.docs_url is None
+        assert api.redoc_url is None
+        assert api.openapi_url is None
