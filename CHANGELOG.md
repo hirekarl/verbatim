@@ -1,3 +1,9 @@
+## v0.7.1 (2026-07-08)
+
+### Fix
+
+- **addon**: correct appsscript.json Editor Add-on manifest schema (#35)
+
 ## v0.7.0 (2026-07-08)
 
 ### Feat
