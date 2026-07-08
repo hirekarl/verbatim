@@ -61,7 +61,7 @@ Because OAuth acquisition was already isolated from `GoogleDocsClient`'s constru
 
 Recommend **Cloud Run** over Cloud Functions: this is already a normal Python app with real dependencies (`google-api-python-client`, `openai`, etc.), and the tool-calling loop can run up to `max_tool_call_rounds=20` LLM round trips, which wants more headroom over request timeout and concurrency than a single function gives. `OPENROUTER_API_KEY` moves to Secret Manager (replacing the local `.env`); the container is built from the existing `src/verbatim` package; no persistent volume is needed since there's no more `token.json` to manage.
 
-Implemented in #23: a multi-stage `Dockerfile` at the repo root builds `verbatim-server` (the HTTP entrypoint, `http_api.py`) via `uv sync --frozen --no-dev`, not the CLI — `cli.py`'s local OAuth consent flow has no meaning inside a container. The image hasn't been build-tested in this environment (no Docker available) or actually deployed — that, and the real `gcloud run deploy` invocation with a real project/region, are left for whoever has GCP access to run next.
+Implemented in #23: a multi-stage `Dockerfile` at the repo root builds `verbatim-server` (the HTTP entrypoint, `http_api.py`) via `uv sync --frozen --no-dev`, not the CLI — `cli.py`'s local OAuth consent flow has no meaning inside a container. `docker build` and a local `docker run` have both been verified (container starts, serves `/audit`, and correctly rejects an invalid bearer token via a real call to Google's tokeninfo endpoint) — but it hasn't been deployed to Cloud Run itself. The real `gcloud run deploy` invocation with a real project/region is left for whoever has GCP access to run next.
 
 Once built and pushed to Artifact Registry, deployment looks like:
 
