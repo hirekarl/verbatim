@@ -272,6 +272,10 @@ verbatim/
 │   ├── test_llm_client.py
 │   ├── test_prompt.py
 │   └── test_token_validator.py
+├── addon/                  # Editor Add-on source (Apps Script) -- see addon/README.md
+│   ├── appsscript.json     # manifest: runtime, oauthScopes, Docs Editor Add-on config
+│   ├── Code.gs             # homepage trigger + CardService sidebar UI
+│   └── Backend.gs          # UrlFetchApp call to the Python backend
 ├── .knowledge-base/        # decomposed reference docs for external APIs (map-and-leaf)
 
 ├── docs/                   # PRD and research reference docs (.docx + Markdown snapshots)

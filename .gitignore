@@ -239,3 +239,6 @@ credentials.json
 client_secret*.json
 token.json
 token.pickle
+
+### Verbatim: per-developer Apps Script project binding (never commit) ###
+addon/.clasp.json

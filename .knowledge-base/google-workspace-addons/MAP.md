@@ -23,4 +23,4 @@ All the actual Docs/Drive API work (range-locating, UTF-16 indexing, suggestion/
 
 ## Scope note
 
-This is reference material only — no Apps Script code exists in this repo yet (tracked as issue #22, "Build Editor Add-on shell," blocked on #20/#21). Unlike the REST API leaves elsewhere in `.knowledge-base/`, nothing here is yet "confirmed live" against Verbatim's own usage; treat these as accurate against Google's current docs as of this writing, and verify against the linked references before relying on anything load-bearing once implementation starts.
+Issue #22 ("Build Editor Add-on shell") has landed the actual source at `addon/` (`appsscript.json`, `Code.gs`, `Backend.gs`) — see `addon/README.md` for what's there and the `clasp` setup steps to actually deploy it. It hasn't been pushed to a real Apps Script project or exercised against a live Docs sidebar yet, so treat the leaves here as accurate against Google's current docs as of this writing, and verify against the linked references before relying on anything load-bearing beyond what `addon/` already reflects.
