@@ -1,3 +1,9 @@
+## v0.4.0 (2026-07-08)
+
+### Feat
+
+- **http-api**: validate inbound Add-on bearer tokens before trusting them (#29)
+
 ## v0.3.0 (2026-07-08)
 
 ### Feat
