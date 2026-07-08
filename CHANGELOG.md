@@ -1,3 +1,9 @@
+## v0.7.0 (2026-07-08)
+
+### Feat
+
+- **http-api**: add shared-secret header and lock down API docs (#32)
+
 ## v0.6.0 (2026-07-08)
 
 ### Feat
