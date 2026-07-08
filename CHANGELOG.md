@@ -1,3 +1,9 @@
+## v0.8.0 (2026-07-08)
+
+### Feat
+
+- **addon**: make brief ID dynamic and record live Cloud Run/Apps Script setup (#36)
+
 ## v0.7.1 (2026-07-08)
 
 ### Fix
