@@ -70,15 +70,16 @@ gcloud run deploy verbatim-backend \
   --image REGION-docker.pkg.dev/PROJECT_ID/verbatim/verbatim-backend \
   --region REGION \
   --allow-unauthenticated \
-  --set-env-vars GOOGLE_OAUTH_CLIENT_ID=<the Add-on's OAuth client ID> \
-  --set-secrets OPENROUTER_API_KEY=openrouter-api-key:latest
+  --set-env-vars GOOGLE_OAUTH_CLIENT_ID=<the Add-on's OAuth client ID>,VERBATIM_DISABLE_DOCS=1 \
+  --set-secrets OPENROUTER_API_KEY=openrouter-api-key:latest,BACKEND_SHARED_SECRET=backend-shared-secret:latest
 ```
 
 Notes on that command:
 
 - `GOOGLE_OAUTH_CLIENT_ID` is a plain env var, not a Secret Manager secret — it's a public client identifier (not sensitive), unlike `OPENROUTER_API_KEY`.
-- `--allow-unauthenticated` is a deliberate v1 choice: the real security boundary is the app-level tokeninfo check in `token_validator.py` (#21), not Cloud Run's own IAM-based invoker auth. Requiring the latter too would mean the Add-on also needs to mint and forward a Google-signed ID token audienced to this specific Cloud Run service — a second, separate auth concern from the OAuth access token `token_validator.py` already checks. Not solved here; flagged for whenever this deployment is exposed beyond internal testing.
-- `openrouter-api-key` must already exist as a Secret Manager secret in the target project (`gcloud secrets create openrouter-api-key --data-file=-`), and the Cloud Run service's runtime service account needs `roles/secretmanager.secretAccessor` on it.
+- `VERBATIM_DISABLE_DOCS=1` turns off FastAPI's `/docs`/`/redoc`/`/openapi.json` — no reason to hand an internet-reachable deployment a free map of its API surface. Left enabled locally (`uv run verbatim-server` with no env override) for dev convenience.
+- `--allow-unauthenticated` is a deliberate v1 choice: the real security boundary is the app-level tokeninfo check in `token_validator.py` (#21) plus the `BACKEND_SHARED_SECRET` header check in `http_api.py` (a cheap first-line filter against scanning/probing, checked before that tokeninfo network call even happens), not Cloud Run's own IAM-based invoker auth. Requiring the latter too would mean the Add-on also needs to mint and forward a Google-signed ID token audienced to this specific Cloud Run service — a second, separate auth concern from the OAuth access token `token_validator.py` already checks. Not solved here; flagged for whenever this deployment is exposed beyond internal testing.
+- `openrouter-api-key` and `backend-shared-secret` must already exist as Secret Manager secrets in the target project (`gcloud secrets create <name> --data-file=-`), and the Cloud Run service's runtime service account needs `roles/secretmanager.secretAccessor` on each.
 
 ## 7. Knowledge-base gap
 

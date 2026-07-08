@@ -12,12 +12,16 @@ function callVerbatimBackend(documentId) {
   const backendUrl = props.getProperty('BACKEND_URL');
   const briefId = props.getProperty('BRIEF_ID');
   const channel = props.getProperty('CHANNEL'); // optional
+  const backendSharedSecret = props.getProperty('BACKEND_SHARED_SECRET');
 
   if (!backendUrl) {
     throw new Error('Script property BACKEND_URL is not set.');
   }
   if (!briefId) {
     throw new Error('Script property BRIEF_ID is not set.');
+  }
+  if (!backendSharedSecret) {
+    throw new Error('Script property BACKEND_SHARED_SECRET is not set.');
   }
 
   const token = ScriptApp.getOAuthToken();
@@ -34,6 +38,7 @@ function callVerbatimBackend(documentId) {
     contentType: 'application/json',
     headers: {
       Authorization: 'Bearer ' + token,
+      'X-Backend-Shared-Secret': backendSharedSecret,
     },
     payload: JSON.stringify(payload),
     muteHttpExceptions: true,

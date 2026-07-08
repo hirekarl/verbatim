@@ -19,7 +19,8 @@ No Apps Script project has been created yet; this directory is the source that w
    - `BACKEND_URL` — the deployed backend's base URL (issue #23; e.g. a Cloud Run service URL — see `docs/workspace-addon-migration.md` §6 for the `Dockerfile`/`gcloud run deploy` steps). No default — the Add-on throws a clear error if unset rather than silently failing.
    - `BRIEF_ID` — the campaign brief's Google Docs document ID to audit against. Per issue #24's resolution, v1 uses this fixed config value rather than a sidebar picker.
    - `CHANNEL` — optional; a target marketing channel (e.g. `email`, `blog`, `twitter`) to activate channel-specific evaluator rules. Leave unset to omit it from the request.
-1. Test via **Deploy → Test deployments** against a real Google Doc, with the backend (`uv run verbatim-server`, or its Cloud Run deployment) reachable and `GOOGLE_OAUTH_CLIENT_ID` configured there to match this Add-on's OAuth client.
+   - `BACKEND_SHARED_SECRET` — must match the backend's `BACKEND_SHARED_SECRET` env var exactly. A cheap first-line filter checked before the backend even looks at the `Authorization` bearer token; no default, request is rejected with a clear error if unset on either side.
+1. Test via **Deploy → Test deployments** against a real Google Doc, with the backend (`uv run verbatim-server`, or its Cloud Run deployment) reachable and `GOOGLE_OAUTH_CLIENT_ID`/`BACKEND_SHARED_SECRET` configured there to match this Add-on.
 
 ## Known limitation (flagged, not solved here)
 
