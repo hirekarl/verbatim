@@ -56,3 +56,4 @@ Rehearse the demo end to end, fix anything that broke, prepare a recorded fallba
 - Christina's rotation into Docs API/agent-loop territory (one self-contained tool wrapper, reviewed by Karl).
 - Any `formatting_and_style` rules not finished by Wednesday.
 - Failure-mode safeguards from PRD 3c not essential to the demo: session cache for Docs API rate-limit resilience, graceful in-doc warning if `brand_guidelines.json` is missing/corrupt.
+- Workspace Add-on migration (fulfills the original production target from `docs/research-notes.snapshot.md` — the CLI is a demo-scoped placeholder for it): see `docs/workspace-addon-migration.md` for the direction/feasibility writeup. Sized as its own mini-sprint, not a quick follow-on.
