@@ -1,3 +1,9 @@
+## v0.9.0 (2026-07-08)
+
+### Feat
+
+- **addon**: make target channel a dropdown instead of hardcoded (#37)
+
 ## v0.8.0 (2026-07-08)
 
 ### Feat
