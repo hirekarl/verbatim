@@ -21,6 +21,7 @@ Coverage is intentionally scoped to the resources and methods Verbatim actually 
 - [`google-drive-api/`](google-drive-api/MAP.md) — file metadata and comments (Day 2's `create_inline_comment` is a Drive API call, not a Docs API call — see that API's `resource-comments.md` for why).
 - [`openrouter-api/`](openrouter-api/MAP.md) — OpenRouter chat completions API used for LLM audits.
 - [`google-workspace-addons/`](google-workspace-addons/MAP.md) — Apps Script, `CardService`, `appsscript.json`, and `UrlFetchApp`, for the Workspace Add-on migration (`docs/workspace-addon-migration.md`).
+- [`google-oauth2-api/`](google-oauth2-api/MAP.md) — the `tokeninfo` endpoint, used to validate inbound Add-on bearer tokens before trusting them (issue #21).
 
 ## Keeping this current
 
