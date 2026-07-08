@@ -3,6 +3,7 @@
 from typing import Any
 
 from verbatim.docs_client import CampaignContext, DocumentContent
+from verbatim.evaluator import Violation
 
 SYSTEM_PROMPT_TEMPLATE = """You are Verbatim, an AI copywriting assistant built to \
 review drafts in Google Docs. Your task is to evaluate the document against the \
@@ -114,7 +115,10 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
 
 
 def build_system_prompt(
-    guidelines_block: str, document: DocumentContent, campaign: CampaignContext
+    guidelines_block: str,
+    document: DocumentContent,
+    campaign: CampaignContext,
+    violations: list[Violation] | None = None,
 ) -> str:
     """Assemble the full system prompt for one audit run.
 
@@ -123,16 +127,30 @@ def build_system_prompt(
             ``BrandGuidelines.format_for_llm_prompt()``.
         document: The parsed content of the document being audited.
         campaign: The parsed content of the campaign brief.
+        violations: Optional list of deterministic violations found in the
+            document.
 
     Returns:
         The persona/process instructions, brand guidelines, campaign brief,
-        and document body, joined into a single system prompt string.
+        document body, and optional deterministic findings, joined into a
+        single system prompt string.
     """
-    return "\n\n".join(
-        [
-            SYSTEM_PROMPT_TEMPLATE,
-            guidelines_block,
-            f"=== CAMPAIGN BRIEF: {campaign.title} ===\n{campaign.body_text}",
-            f"=== DOCUMENT UNDER AUDIT: {document.title} ===\n{document.body_text}",
-        ]
-    )
+    sections = [
+        SYSTEM_PROMPT_TEMPLATE,
+        guidelines_block,
+        f"=== CAMPAIGN BRIEF: {campaign.title} ===\n{campaign.body_text}",
+        f"=== DOCUMENT UNDER AUDIT: {document.title} ===\n{document.body_text}",
+    ]
+    if violations:
+        findings_lines = ["=== DETERMINISTIC FINDINGS ==="]
+        for v in violations:
+            line = (
+                f"- [{v.category}] {v.severity.upper()}: {v.message} "
+                f"(matched: '{v.matched_text}')"
+            )
+            if v.suggestion:
+                line += f" -> Suggestion: '{v.suggestion}'"
+            findings_lines.append(line)
+        sections.append("\n".join(findings_lines))
+
+    return "\n\n".join(sections)

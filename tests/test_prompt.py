@@ -1,6 +1,7 @@
 """Tests for the system prompt assembly module."""
 
 from verbatim.docs_client import CampaignContext, DocumentContent
+from verbatim.evaluator import Violation
 from verbatim.prompt import SYSTEM_PROMPT_TEMPLATE, TOOL_SCHEMAS, build_system_prompt
 
 
@@ -103,6 +104,75 @@ class TestBuildSystemPrompt:
             < prompt.index("CAMPAIGN_MARKER")
             < prompt.index("DOCUMENT_MARKER")
         )
+
+    def test_includes_deterministic_findings_when_violations_provided(self) -> None:
+        """Deterministic findings are formatted and included at the end."""
+        document = DocumentContent(
+            document_id="doc-id", title="Draft", body_text="Body.", headings=[]
+        )
+        campaign = CampaignContext(
+            document_id="brief-id", title="Brief", body_text="Goals.", headings=[]
+        )
+        violations = [
+            Violation(
+                category="banned_words_and_competitors",
+                severity="error",
+                message="Banned word found: 'competitor'",
+                matched_text="competitor",
+                suggestion=None,
+            ),
+            Violation(
+                category="formatting_and_style",
+                severity="warning",
+                message="Avoid ampersands in headings",
+                matched_text="&",
+                suggestion="and",
+            ),
+        ]
+
+        prompt = build_system_prompt(
+            guidelines_block="",
+            document=document,
+            campaign=campaign,
+            violations=violations,
+        )
+
+        assert "=== DETERMINISTIC FINDINGS ===" in prompt
+        assert (
+            "- [banned_words_and_competitors] ERROR: Banned word found: "
+            "'competitor' (matched: 'competitor')"
+        ) in prompt
+        assert (
+            "- [formatting_and_style] WARNING: Avoid ampersands in headings "
+            "(matched: '&') -> Suggestion: 'and'"
+        ) in prompt
+
+    def test_excludes_deterministic_findings_when_violations_empty_or_none(
+        self,
+    ) -> None:
+        """Deterministic findings section is not appended if there are no violations."""
+        document = DocumentContent(
+            document_id="doc-id", title="Draft", body_text="Body.", headings=[]
+        )
+        campaign = CampaignContext(
+            document_id="brief-id", title="Brief", body_text="Goals.", headings=[]
+        )
+
+        prompt_none = build_system_prompt(
+            guidelines_block="",
+            document=document,
+            campaign=campaign,
+            violations=None,
+        )
+        prompt_empty = build_system_prompt(
+            guidelines_block="",
+            document=document,
+            campaign=campaign,
+            violations=[],
+        )
+
+        assert "=== DETERMINISTIC FINDINGS ===" not in prompt_none
+        assert "=== DETERMINISTIC FINDINGS ===" not in prompt_empty
 
 
 class TestToolSchemas:

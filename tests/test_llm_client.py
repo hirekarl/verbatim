@@ -114,7 +114,17 @@ class TestCompleteChat:
         client.complete_chat(messages=messages, tools=tools)
 
         mock_create.assert_called_once_with(
-            model="some/model", messages=messages, tools=tools
+            model="some/model", messages=messages, tools=tools, max_tokens=4096
+        )
+
+    def test_forwards_custom_max_tokens_to_the_sdk_call(
+        self, client: OpenRouterClient, mock_create: Any
+    ) -> None:
+        """A custom max_tokens limit is passed straight through to the SDK."""
+        mock_create.return_value = _fake_response("Looks good.", None, {})
+        client.complete_chat(messages=[], tools=[], max_tokens=1000)
+        mock_create.assert_called_once_with(
+            model="some/model", messages=[], tools=[], max_tokens=1000
         )
 
     def test_returns_content_only_result_when_the_model_makes_no_tool_calls(

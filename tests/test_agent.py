@@ -1,8 +1,7 @@
-"""Tests for the single-pass tool-calling agent loop."""
-
 from unittest.mock import MagicMock
 
 import pytest
+from pytest_mock import MockerFixture
 
 from verbatim.agent import AgentRunResult, run_agent
 from verbatim.brand_guidelines import BrandGuidelines
@@ -110,6 +109,46 @@ class TestRunAgent:
         docs_client.get_document_content.assert_called_once_with("doc-id")
         docs_client.get_campaign_context.assert_called_once_with("brief-id")
 
+    def test_runs_evaluator_and_passes_violations_to_prompt(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        brand_guidelines: BrandGuidelines,
+        mocker: MockerFixture,
+    ) -> None:
+        """The agent runs evaluator and passes findings to prompt builder."""
+        mock_evaluator = mocker.patch("verbatim.agent.BrandGuidelinesEvaluator")
+        mock_instance = mock_evaluator.return_value
+        fake_violations = [MagicMock()]
+        mock_instance.evaluate.return_value = fake_violations
+
+        mock_build = mocker.patch("verbatim.agent.build_system_prompt")
+        mock_build.return_value = "System Prompt Content"
+
+        llm_client.complete_chat.return_value = _no_tool_calls_result()
+
+        run_agent(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            brief_id="brief-id",
+            brand_guidelines=brand_guidelines,
+            target_channel="email",
+        )
+
+        mock_evaluator.assert_called_once_with(
+            guidelines_path=str(brand_guidelines.filepath)
+        )
+        mock_instance.evaluate.assert_called_once_with(
+            _DOCUMENT.body_text, channel="email"
+        )
+        mock_build.assert_called_once_with(
+            brand_guidelines.format_for_llm_prompt(target_channel="email"),
+            _DOCUMENT,
+            _CAMPAIGN,
+            violations=fake_violations,
+        )
+
     def test_dispatches_a_single_create_suggestion_call_then_stops(
         self,
         docs_client: MagicMock,
@@ -141,6 +180,35 @@ class TestRunAgent:
             replacement_text="Capability",
         )
         assert result.suggestions_made == 1
+        assert result.comments_made == 0
+
+    def test_skips_redundant_suggestion_when_matched_and_replacement_are_identical(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        brand_guidelines: BrandGuidelines,
+    ) -> None:
+        """A redundant suggestion tool call is skipped and not counted."""
+        suggestion_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            arguments={"matched_text": "Same text", "replacement_text": "Same text"},
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(suggestion_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = run_agent(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            brief_id="brief-id",
+            brand_guidelines=brand_guidelines,
+        )
+
+        docs_client.create_suggestion.assert_not_called()
+        assert result.suggestions_made == 0
         assert result.comments_made == 0
 
     def test_dispatches_a_single_create_inline_comment_call_then_stops(
