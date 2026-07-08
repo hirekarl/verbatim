@@ -63,4 +63,4 @@ You can use `uv run cz commit` to run an interactive prompt that helps you craft
 
 ## Code of Conduct
 
-By participating, you are expected to uphold the \[Code of Conduct\](file:///Users/karlsaintlucy/documents/pursuit/l2/verbatim/CODE_OF_CONDUCT.md).
+By participating, you are expected to uphold the [Code of Conduct](CODE_OF_CONDUCT.md).
