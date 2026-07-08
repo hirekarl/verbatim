@@ -1,3 +1,9 @@
+## v0.2.0 (2026-07-08)
+
+### Feat
+
+- **docs-client**: add from_access_token() auth path for hosted use (#27)
+
 ## v0.1.0 (2026-07-08)
 
 ### Feat
