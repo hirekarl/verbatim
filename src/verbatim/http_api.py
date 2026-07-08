@@ -17,6 +17,7 @@ from verbatim.agent import run_agent
 from verbatim.brand_guidelines import BrandGuidelines
 from verbatim.docs_client import AuthenticationError, DocsClientError, GoogleDocsClient
 from verbatim.llm_client import LLMClientError, OpenRouterClient
+from verbatim.token_validator import validate_access_token
 
 DEFAULT_MODEL = "google/gemini-2.5-flash"
 
@@ -83,9 +84,10 @@ def audit(
         The audit run's outcome (suggestions/comments made, cap status).
 
     Raises:
-        HTTPException: 401 if the Authorization header is missing/malformed,
-            or mapped from any DocsClientError/LLMClientError/
-            FileNotFoundError/ValueError/KeyError raised during the run.
+        HTTPException: 401 if the Authorization header is missing/malformed
+            or the bearer token fails tokeninfo validation, or mapped from
+            any DocsClientError/LLMClientError/FileNotFoundError/
+            ValueError/KeyError raised during the run.
     """
     if credentials is None:
         raise HTTPException(
@@ -93,6 +95,7 @@ def audit(
         )
 
     try:
+        validate_access_token(credentials.credentials)
         docs_client = GoogleDocsClient.from_access_token(
             credentials.credentials, include_drive=True
         )

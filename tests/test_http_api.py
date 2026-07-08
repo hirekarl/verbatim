@@ -11,6 +11,7 @@ from verbatim.agent import AgentRunResult
 from verbatim.docs_client import AuthenticationError, DocsClientError
 from verbatim.http_api import app
 from verbatim.llm_client import LLMClientError
+from verbatim.token_validator import TokenValidationError
 
 
 class TestAuditEndpoint:
@@ -42,6 +43,11 @@ class TestAuditEndpoint:
     def mock_brand_guidelines(self, mocker: MockerFixture) -> MagicMock:
         """Mock the BrandGuidelines class."""
         return mocker.patch("verbatim.http_api.BrandGuidelines")
+
+    @pytest.fixture(autouse=True)
+    def mock_validate_access_token(self, mocker: MockerFixture) -> MagicMock:
+        """Mock token validation so tests don't hit the real tokeninfo endpoint."""
+        return mocker.patch("verbatim.http_api.validate_access_token")
 
     def test_audit_success(
         self,
@@ -226,6 +232,59 @@ class TestAuditEndpoint:
     ) -> None:
         """Unexpected exceptions map to 500."""
         mock_llm_client.side_effect = RuntimeError("boom")
+
+        response = client.post(
+            "/audit",
+            json={"document_id": "doc-id", "brief_id": "brief-id"},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+
+        assert response.status_code == 500
+
+    def test_audit_token_validation_error(
+        self,
+        client: TestClient,
+        mock_validate_access_token: MagicMock,
+        mock_docs_client: MagicMock,
+    ) -> None:
+        """A token that fails tokeninfo validation maps to 401, before any API call."""
+        mock_validate_access_token.side_effect = TokenValidationError("bad audience")
+
+        response = client.post(
+            "/audit",
+            json={"document_id": "doc-id", "brief_id": "brief-id"},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+
+        assert response.status_code == 401
+        assert response.json()["detail"] == "bad audience"
+        mock_docs_client.assert_not_called()
+
+    def test_audit_token_validation_unreachable(
+        self,
+        client: TestClient,
+        mock_validate_access_token: MagicMock,
+    ) -> None:
+        """A tokeninfo network failure maps to 502, not 401."""
+        mock_validate_access_token.side_effect = DocsClientError("unreachable")
+
+        response = client.post(
+            "/audit",
+            json={"document_id": "doc-id", "brief_id": "brief-id"},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+
+        assert response.status_code == 502
+
+    def test_audit_token_validation_misconfigured(
+        self,
+        client: TestClient,
+        mock_validate_access_token: MagicMock,
+    ) -> None:
+        """A missing GOOGLE_OAUTH_CLIENT_ID surfaces as a 500, not a 401."""
+        mock_validate_access_token.side_effect = RuntimeError(
+            "GOOGLE_OAUTH_CLIENT_ID environment variable is not set"
+        )
 
         response = client.post(
             "/audit",

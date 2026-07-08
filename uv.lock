@@ -1141,13 +1141,14 @@ wheels = [
 
 [[package]]
 name = "verbatim"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "google-api-python-client" },
     { name = "google-auth-httplib2" },
     { name = "google-auth-oauthlib" },
+    { name = "httpx" },
     { name = "openai" },
     { name = "python-dotenv" },
     { name = "uvicorn", extra = ["standard"] },
@@ -1156,7 +1157,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "commitizen" },
-    { name = "httpx" },
     { name = "mdformat" },
     { name = "mdformat-gfm" },
     { name = "mypy" },
@@ -1173,6 +1173,7 @@ requires-dist = [
     { name = "google-api-python-client", specifier = ">=2.198.0" },
     { name = "google-auth-httplib2", specifier = ">=0.4.0" },
     { name = "google-auth-oauthlib", specifier = ">=1.4.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "openai", specifier = ">=2.44.0" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0" },
@@ -1181,7 +1182,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "commitizen" },
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "mdformat" },
     { name = "mdformat-gfm" },
     { name = "mypy" },

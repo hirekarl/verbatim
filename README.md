@@ -226,6 +226,8 @@ For a hosted deployment (the eventual Workspace Add-on backend — see `docs/wor
 uv run verbatim-server
 ```
 
+This requires `GOOGLE_OAUTH_CLIENT_ID` to be set (alongside `OPENROUTER_API_KEY`, in the same `.env`) — the OAuth client ID inbound bearer tokens are expected to carry as their audience, checked against Google's tokeninfo endpoint before any request is trusted. See `src/verbatim/token_validator.py`.
+
 This starts a FastAPI app (via uvicorn) on `PORT` (default `8080`) with a single route:
 
 ```sh
@@ -235,7 +237,7 @@ curl -X POST http://localhost:8080/audit \
   -d '{"document_id": "1_abc123xyz", "brief_id": "1_brief456abc", "channel": "email"}'
 ```
 
-Unlike the CLI (which authenticates via a local OAuth consent flow, caching a token to `token.json`), the HTTP entrypoint expects the caller to already hold a valid Google OAuth access token and forward it in the `Authorization` header — see `GoogleDocsClient.from_access_token()`. Note that inbound bearer-token validation isn't implemented yet (tracked on [#21](https://github.com/hirekarl/verbatim/issues/21)), so this endpoint isn't safe to expose publicly until that lands.
+Unlike the CLI (which authenticates via a local OAuth consent flow, caching a token to `token.json`), the HTTP entrypoint expects the caller to already hold a valid Google OAuth access token and forward it in the `Authorization` header — see `GoogleDocsClient.from_access_token()`. The token is validated against Google's tokeninfo endpoint (audience and required scope) before it's trusted.
 
 ## Reference
 
@@ -259,6 +261,7 @@ verbatim/
 │   ├── llm_client.py       # OpenRouter chat-completions client
 │   ├── prompt.py           # system prompt assembly + tool schemas
 │   ├── py.typed
+│   ├── token_validator.py  # validates inbound Add-on bearer tokens (tokeninfo)
 │   └── data/
 │       └── brand_guidelines.json  # brand voice/style rules (Mailchimp style guide synthesis)
 ├── tests/                  # pytest suite
@@ -267,7 +270,8 @@ verbatim/
 │   ├── test_docs_client.py
 │   ├── test_http_api.py
 │   ├── test_llm_client.py
-│   └── test_prompt.py
+│   ├── test_prompt.py
+│   └── test_token_validator.py
 ├── .knowledge-base/        # decomposed reference docs for external APIs (map-and-leaf)
 
 ├── docs/                   # PRD and research reference docs (.docx + Markdown snapshots)
