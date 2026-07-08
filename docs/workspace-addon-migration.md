@@ -59,7 +59,26 @@ Because OAuth acquisition was already isolated from `GoogleDocsClient`'s constru
 
 ## 6. Hosting
 
-High-level only — not an infra buildout plan. Recommend **Cloud Run** over Cloud Functions: this is already a normal Python app with real dependencies (`google-api-python-client`, `openai`, etc.), and the tool-calling loop can run up to `max_tool_call_rounds=20` LLM round trips, which wants more headroom over request timeout and concurrency than a single function gives. `OPENROUTER_API_KEY` moves to Secret Manager (replacing the local `.env`); the container is built from the existing `src/verbatim` package; no persistent volume is needed since there's no more `token.json` to manage.
+Recommend **Cloud Run** over Cloud Functions: this is already a normal Python app with real dependencies (`google-api-python-client`, `openai`, etc.), and the tool-calling loop can run up to `max_tool_call_rounds=20` LLM round trips, which wants more headroom over request timeout and concurrency than a single function gives. `OPENROUTER_API_KEY` moves to Secret Manager (replacing the local `.env`); the container is built from the existing `src/verbatim` package; no persistent volume is needed since there's no more `token.json` to manage.
+
+Implemented in #23: a multi-stage `Dockerfile` at the repo root builds `verbatim-server` (the HTTP entrypoint, `http_api.py`) via `uv sync --frozen --no-dev`, not the CLI — `cli.py`'s local OAuth consent flow has no meaning inside a container. `docker build` and a local `docker run` have both been verified (container starts, serves `/audit`, and correctly rejects an invalid bearer token via a real call to Google's tokeninfo endpoint) — but it hasn't been deployed to Cloud Run itself. The real `gcloud run deploy` invocation with a real project/region is left for whoever has GCP access to run next.
+
+Once built and pushed to Artifact Registry, deployment looks like:
+
+```sh
+gcloud run deploy verbatim-backend \
+  --image REGION-docker.pkg.dev/PROJECT_ID/verbatim/verbatim-backend \
+  --region REGION \
+  --allow-unauthenticated \
+  --set-env-vars GOOGLE_OAUTH_CLIENT_ID=<the Add-on's OAuth client ID> \
+  --set-secrets OPENROUTER_API_KEY=openrouter-api-key:latest
+```
+
+Notes on that command:
+
+- `GOOGLE_OAUTH_CLIENT_ID` is a plain env var, not a Secret Manager secret — it's a public client identifier (not sensitive), unlike `OPENROUTER_API_KEY`.
+- `--allow-unauthenticated` is a deliberate v1 choice: the real security boundary is the app-level tokeninfo check in `token_validator.py` (#21), not Cloud Run's own IAM-based invoker auth. Requiring the latter too would mean the Add-on also needs to mint and forward a Google-signed ID token audienced to this specific Cloud Run service — a second, separate auth concern from the OAuth access token `token_validator.py` already checks. Not solved here; flagged for whenever this deployment is exposed beyond internal testing.
+- `openrouter-api-key` must already exist as a Secret Manager secret in the target project (`gcloud secrets create openrouter-api-key --data-file=-`), and the Cloud Run service's runtime service account needs `roles/secretmanager.secretAccessor` on it.
 
 ## 7. Knowledge-base gap
 

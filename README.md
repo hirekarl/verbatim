@@ -279,9 +279,11 @@ verbatim/
 ├── .knowledge-base/        # decomposed reference docs for external APIs (map-and-leaf)
 
 ├── docs/                   # PRD and research reference docs (.docx + Markdown snapshots)
-├── .env.example            # OPENROUTER_API_KEY template; copy to .env (git-ignored)
+├── .env.example            # OPENROUTER_API_KEY/GOOGLE_OAUTH_CLIENT_ID template; copy to .env (git-ignored)
+├── .dockerignore
 ├── BOOTSTRAPPING.md        # scaffolding rationale and remaining setup work
 ├── CLAUDE.md               # project context for AI coding agents
+├── Dockerfile              # builds verbatim-server for Cloud Run (not the CLI)
 ├── LICENSE                 # MIT
 ├── pyproject.toml          # project metadata + all tool configuration
 └── uv.lock                 # pinned dependency versions

@@ -16,7 +16,7 @@ No Apps Script project has been created yet; this directory is the source that w
 1. `clasp create --type docs --title "Verbatim"` (or `clasp clone <scriptId>` if a project already exists) inside this directory — this generates a `.clasp.json` pointing at the new script's ID. `.clasp.json` is deliberately not committed (it's per-developer/per-environment); each person setting this up creates their own.
 1. `clasp push` to upload `appsscript.json`/`Code.gs`/`Backend.gs`.
 1. In the Apps Script project's **Project Settings → Script Properties**, set:
-   - `BACKEND_URL` — the deployed backend's base URL (issue #23; e.g. a Cloud Run service URL). No default — the Add-on throws a clear error if unset rather than silently failing.
+   - `BACKEND_URL` — the deployed backend's base URL (issue #23; e.g. a Cloud Run service URL — see `docs/workspace-addon-migration.md` §6 for the `Dockerfile`/`gcloud run deploy` steps). No default — the Add-on throws a clear error if unset rather than silently failing.
    - `BRIEF_ID` — the campaign brief's Google Docs document ID to audit against. Per issue #24's resolution, v1 uses this fixed config value rather than a sidebar picker.
    - `CHANNEL` — optional; a target marketing channel (e.g. `email`, `blog`, `twitter`) to activate channel-specific evaluator rules. Leave unset to omit it from the request.
 1. Test via **Deploy → Test deployments** against a real Google Doc, with the backend (`uv run verbatim-server`, or its Cloud Run deployment) reachable and `GOOGLE_OAUTH_CLIENT_ID` configured there to match this Add-on's OAuth client.
