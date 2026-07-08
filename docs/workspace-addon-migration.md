@@ -65,7 +65,7 @@ Implemented in #23: a multi-stage `Dockerfile` at the repo root builds `verbatim
 
 `GOOGLE_OAUTH_CLIENT_ID` is now set on the live service, sourced from the standalone Apps Script project (#22, `addon/`) after associating it with `verbatim-501715` via the script editor's Project Settings → Google Cloud Platform (GCP) Project → project number `75857425003`, then reading the auto-created OAuth 2.0 Client ID off that project's [Credentials page](https://console.cloud.google.com/apis/credentials?project=verbatim-501715). Updated via `gcloud run services update verbatim-backend --region=us-east4 --project=verbatim-501715 --update-env-vars=GOOGLE_OAUTH_CLIENT_ID=...` (not `--set-env-vars`, to avoid clobbering `VERBATIM_DISABLE_DOCS`) — confirmed both are still in effect after the update.
 
-Still outstanding: setting the Add-on's Script Properties (`BACKEND_URL`, `BRIEF_ID`, `BACKEND_SHARED_SECRET`, optional `CHANNEL` — see `addon/README.md`) and an actual end-to-end run via **Deploy → Test deployments** against a real Google Doc. Both are manual, in-browser steps with no CLI/API path.
+Still outstanding: setting the Add-on's Script Properties (`BACKEND_URL`, `BACKEND_SHARED_SECRET`, optional `DEFAULT_BRIEF_ID`/`CHANNEL` — see `addon/README.md`; brief ID itself is a sidebar text field, not a Script Property) and an actual end-to-end run via **Deploy → Test deployments** against a real Google Doc. Both are manual, in-browser steps with no CLI/API path.
 
 The actual command run (`GOOGLE_OAUTH_CLIENT_ID` omitted — see above):
 
