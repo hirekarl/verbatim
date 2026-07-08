@@ -1,3 +1,9 @@
+## v0.6.0 (2026-07-08)
+
+### Feat
+
+- **infra**: containerize the HTTP backend for Cloud Run (#31)
+
 ## v0.5.0 (2026-07-08)
 
 ### Feat
