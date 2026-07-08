@@ -93,14 +93,16 @@ class TestBrandGuidelines:
         assert "=== BRAND VOICE & STYLE GUIDELINES ===" in prompt
 
     def test_raises_file_not_found_for_invalid_path(self) -> None:
-        """Test that loading from a nonexistent path raises FileNotFoundError."""
-        with pytest.raises(FileNotFoundError):
-            BrandGuidelines("nonexistent.json")
+        """Test that loading from a nonexistent path sets is_valid to False."""
+        guidelines = BrandGuidelines("nonexistent.json")
+        assert not guidelines.is_valid
+        assert guidelines.error_message is not None
+        assert "fixture not found" in guidelines.error_message.lower()
 
     def test_validates_banned_words_and_competitors_structure(
         self, tmp_path: Path
     ) -> None:
-        """Test that malformed banned_words_and_competitors raises TypeError."""
+        """Test that malformed banned_words_and_competitors sets is_valid to False."""
         # Create a JSON with banned_words_and_competitors as a list (should be dict)
         malformed_json = {
             "metadata": {"name": "Test"},
@@ -116,11 +118,13 @@ class TestBrandGuidelines:
         json_file = tmp_path / "malformed.json"
         json_file.write_text(json.dumps(malformed_json))
 
-        with pytest.raises(TypeError, match="must be a dictionary"):
-            BrandGuidelines(json_file)
+        guidelines = BrandGuidelines(json_file)
+        assert not guidelines.is_valid
+        assert guidelines.error_message is not None
+        assert "must be a dictionary" in guidelines.error_message.lower()
 
     def test_validates_banned_words_type(self, tmp_path: Path) -> None:
-        """Test that banned_words with wrong type raises TypeError."""
+        """Test that banned_words with wrong type sets is_valid to False."""
         malformed_json = {
             "metadata": {"name": "Test"},
             "voice_and_tone": {},
@@ -134,11 +138,13 @@ class TestBrandGuidelines:
         json_file = tmp_path / "malformed.json"
         json_file.write_text(json.dumps(malformed_json))
 
-        with pytest.raises(TypeError, match=r"banned_words.*must be a list"):
-            BrandGuidelines(json_file)
+        guidelines = BrandGuidelines(json_file)
+        assert not guidelines.is_valid
+        assert guidelines.error_message is not None
+        assert "must be a list" in guidelines.error_message.lower()
 
     def test_validates_standardized_spellings_type(self, tmp_path: Path) -> None:
-        """Test that standardized_spellings with wrong type raises TypeError."""
+        """Test that standardized_spellings with wrong type sets is_valid to False."""
         malformed_json = {
             "metadata": {"name": "Test"},
             "voice_and_tone": {},
@@ -154,5 +160,7 @@ class TestBrandGuidelines:
         json_file = tmp_path / "malformed.json"
         json_file.write_text(json.dumps(malformed_json))
 
-        with pytest.raises(TypeError, match=r"standardized_spellings.*must be a dict"):
-            BrandGuidelines(json_file)
+        guidelines = BrandGuidelines(json_file)
+        assert not guidelines.is_valid
+        assert guidelines.error_message is not None
+        assert "must be a dict" in guidelines.error_message.lower()

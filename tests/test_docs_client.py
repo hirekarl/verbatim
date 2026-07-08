@@ -1066,3 +1066,117 @@ class TestGoogleDocsClientFromLocalCredentials:
         ]
         assert client._service is fake_docs_service
         assert client._drive_service is fake_drive_service
+
+
+class TestGoogleDocsClientCache:
+    """Tests the caching and invalidation behavior of GoogleDocsClient."""
+
+    @pytest.fixture
+    def fake_service(self) -> MagicMock:
+        """A fake Docs API discovery service returning a fixed document."""
+        service = MagicMock()
+        service.documents.return_value.get.return_value.execute.return_value = (
+            _FAKE_DOCUMENT_WITH_INDICES
+        )
+        return service
+
+    @pytest.fixture
+    def fake_drive_service(self) -> MagicMock:
+        """A fake Drive API discovery service, defaulting to non-Editor access."""
+        drive_service = MagicMock()
+        drive_service.files.return_value.get.return_value.execute.return_value = {
+            "capabilities": {"canEdit": False}
+        }
+        return drive_service
+
+    @pytest.fixture
+    def client(
+        self, fake_service: MagicMock, fake_drive_service: MagicMock
+    ) -> GoogleDocsClient:
+        """A GoogleDocsClient wired to both fake services."""
+        return GoogleDocsClient(service=fake_service, drive_service=fake_drive_service)
+
+    def test_caches_document_content(
+        self, client: GoogleDocsClient, fake_service: MagicMock
+    ) -> None:
+        """Fetching document content twice only queries the API once."""
+        get_doc = fake_service.documents.return_value.get
+        get_doc.reset_mock()
+
+        # First fetch - queries API
+        doc1 = client.get_document_content("doc-id")
+        assert doc1.title == "Q3 Launch Blog Draft"
+        assert get_doc.call_count == 1
+
+        # Second fetch - uses cache
+        doc2 = client.get_document_content("doc-id")
+        assert doc2.title == "Q3 Launch Blog Draft"
+        assert get_doc.call_count == 1  # count remains 1
+
+    def test_invalidates_cache_on_suggestion(
+        self, client: GoogleDocsClient, fake_service: MagicMock
+    ) -> None:
+        """Creating a suggestion invalidates the cache, forcing a refetch."""
+        get_doc = fake_service.documents.return_value.get
+        get_doc.reset_mock()
+
+        # Seed cache
+        client.get_document_content("doc-id")
+        assert get_doc.call_count == 1
+
+        # Create suggestion
+        client.create_suggestion("doc-id", "feature", "new-feature")
+
+        # Fetch again - must query API again
+        client.get_document_content("doc-id")
+        assert get_doc.call_count >= 2
+
+    def test_invalidates_cache_on_comment_when_editing_directly(
+        self,
+        client: GoogleDocsClient,
+        fake_service: MagicMock,
+        fake_drive_service: MagicMock,
+    ) -> None:
+        """Creating a comment invalidates the cache if the account can edit directly."""
+        get_doc = fake_service.documents.return_value.get
+        get_doc.reset_mock()
+        fake_drive_service.files.return_value.get.return_value.execute.return_value = {
+            "capabilities": {"canEdit": True}
+        }
+
+        # Seed cache
+        client.get_document_content("doc-id")
+        assert get_doc.call_count == 1
+
+        # Create comment
+        client.create_inline_comment("doc-id", "feature", "Consider rephrasing.")
+
+        # Fetch again - must query API again
+        client.get_document_content("doc-id")
+        assert get_doc.call_count >= 2
+
+
+class TestGoogleDocsClientListComments:
+    """Tests the list_comments method of GoogleDocsClient (Christina's rotation)."""
+
+    @pytest.fixture
+    def fake_service(self) -> MagicMock:
+        """A fake Docs API discovery service returning a fixed document."""
+        service = MagicMock()
+        service.documents.return_value.get.return_value.execute.return_value = (
+            _FAKE_DOCUMENT_WITH_INDICES
+        )
+        return service
+
+    @pytest.fixture
+    def client(self, fake_service: MagicMock) -> GoogleDocsClient:
+        """A GoogleDocsClient wired to fake service."""
+        return GoogleDocsClient(service=fake_service)
+
+    def test_list_comments_raises_not_implemented(
+        self, client: GoogleDocsClient
+    ) -> None:
+        """Calling list_comments raises NotImplementedError."""
+        with pytest.raises(NotImplementedError) as exc_info:
+            client.list_comments("doc-id")
+        assert str(exc_info.value) == "Christina's rotation task"

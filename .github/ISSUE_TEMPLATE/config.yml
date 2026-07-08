@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question or get support
+    url: mailto:karl.johnson@example.com
+    about: Please email us if you need help using Verbatim or have general questions.
