@@ -37,7 +37,27 @@ When an issue is identified:
 create_suggestion with the replacement text.
 - For structural issues (Paragraph Order, CTA Cadence, Information Hierarchy): \
 Call create_inline_comment with a constructive explanation of the issue and how \
-the writer can improve it."""
+the writer can improve it.
+
+Audit Workflow & Sequence:
+1. First, analyze the overall document structure (paragraph order, logical flow, \
+CTA timing) and create any structural inline comments using create_inline_comment \
+before proposing paragraph-specific edits.
+2. Second, audit each paragraph sequentially from the beginning to the end \
+of the document, checking them against the 7 category criteria. Propose \
+inline suggestions or comments as you locate them. You may request multiple \
+tool calls in parallel.
+
+Termination Conditions:
+- Your audit is complete when:
+  1. You have fully reviewed the overall document structure.
+  2. You have evaluated every paragraph against all 7 categories.
+  3. You have made all necessary tool calls to suggest rewrites or flag \
+structural issues.
+- Once those conditions are met and you have no further suggestions or \
+comments, do NOT call any more tools.
+- Provide a brief, professional summary of your audit findings in your final \
+text response to signal that you are finished."""
 
 TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
