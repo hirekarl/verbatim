@@ -1,3 +1,9 @@
+## v0.5.0 (2026-07-08)
+
+### Feat
+
+- **addon**: build Editor Add-on shell (manifest + CardService + UrlFetchApp) (#30)
+
 ## v0.4.0 (2026-07-08)
 
 ### Feat
