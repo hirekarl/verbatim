@@ -24,16 +24,16 @@ Every Apps Script project has one `appsscript.json` manifest file. For an Editor
         "primaryColor": "#4285F4"
       }
     },
-    "editors": {
-      "docs": {
-        "homepageTrigger": {
-          "runFunction": "onHomepage"
-        }
+    "docs": {
+      "homepageTrigger": {
+        "runFunction": "onHomepage"
       }
     }
   }
 }
 ```
+
+**Verified live** against a real standalone Apps Script project (`clasp push`) while building #22: `addOns.docs.homepageTrigger` is correct; the previously-documented `addOns.editors.docs.homepageTrigger` nesting is wrong and gets rejected by `clasp`/the Apps Script API with `"appsscript.json" has errors: Invalid manifest: unknown fields: [addOns.editors]`. Docs-editor config sits directly under `addOns`, a sibling of `addOns.common`, not nested under an `editors` wrapper.
 
 ## `oauthScopes`
 
@@ -43,7 +43,7 @@ Per `docs/workspace-addon-migration.md` §4, the recommended auth model has Apps
 - `drive` — same full-`drive` scope already required today (confirmed live, documented in `../google-drive-api/MAP.md`) for `comments.create` to work on documents the app didn't create/open itself.
 - `script.external_request` — required for `UrlFetchApp` to call any non-Google host (the Python backend). Without this scope, `UrlFetchApp.fetch()` throws at runtime.
 
-## `addOns.editors.docs`
+## `addOns.docs`
 
 Scopes the Add-on to Docs only (as opposed to `addOns.common` alone, which would make it a general Workspace Add-on offered across multiple hosts). `homepageTrigger.runFunction` names the function that builds and returns the sidebar's initial `Card` — see `concept-cardservice-ui.md`.
 

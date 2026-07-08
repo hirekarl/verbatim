@@ -15,11 +15,9 @@
         "primaryColor": "#4285F4"
       }
     },
-    "editors": {
-      "docs": {
-        "homepageTrigger": {
-          "runFunction": "onHomepage"
-        }
+    "docs": {
+      "homepageTrigger": {
+        "runFunction": "onHomepage"
       }
     }
   }
