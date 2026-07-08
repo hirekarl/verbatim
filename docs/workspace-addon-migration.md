@@ -61,24 +61,26 @@ Because OAuth acquisition was already isolated from `GoogleDocsClient`'s constru
 
 Recommend **Cloud Run** over Cloud Functions: this is already a normal Python app with real dependencies (`google-api-python-client`, `openai`, etc.), and the tool-calling loop can run up to `max_tool_call_rounds=20` LLM round trips, which wants more headroom over request timeout and concurrency than a single function gives. `OPENROUTER_API_KEY` moves to Secret Manager (replacing the local `.env`); the container is built from the existing `src/verbatim` package; no persistent volume is needed since there's no more `token.json` to manage.
 
-Implemented in #23: a multi-stage `Dockerfile` at the repo root builds `verbatim-server` (the HTTP entrypoint, `http_api.py`) via `uv sync --frozen --no-dev`, not the CLI — `cli.py`'s local OAuth consent flow has no meaning inside a container. `docker build` and a local `docker run` have both been verified (container starts, serves `/audit`, and correctly rejects an invalid bearer token via a real call to Google's tokeninfo endpoint) — but it hasn't been deployed to Cloud Run itself. The real `gcloud run deploy` invocation with a real project/region is left for whoever has GCP access to run next.
+Implemented in #23: a multi-stage `Dockerfile` at the repo root builds `verbatim-server` (the HTTP entrypoint, `http_api.py`) via `uv sync --frozen --no-dev`, not the CLI — `cli.py`'s local OAuth consent flow has no meaning inside a container. **Deployed**: `verbatim-backend` on Cloud Run, region `us-east4`, project `verbatim-501715` — `https://verbatim-backend-75857425003.us-east4.run.app`. Confirmed live: `/docs` returns 404 (`VERBATIM_DISABLE_DOCS=1`), `/audit` returns 401 without a valid `BACKEND_SHARED_SECRET`. `GOOGLE_OAUTH_CLIENT_ID` is not yet set — still pending the Apps Script/GCP-project association step (§4's audience-matching mechanism needs a real, discoverable client ID, which a script bound to Google's hidden default project doesn't have) — so `/audit` 500s until that's added via a follow-up `gcloud run services update`.
 
-Once built and pushed to Artifact Registry, deployment looks like:
+The actual command run (`GOOGLE_OAUTH_CLIENT_ID` omitted — see above):
 
 ```sh
 gcloud run deploy verbatim-backend \
-  --image REGION-docker.pkg.dev/PROJECT_ID/verbatim/verbatim-backend \
-  --region REGION \
+  --image=us-east4-docker.pkg.dev/verbatim-501715/verbatim/verbatim-backend:latest \
+  --region=us-east4 \
   --allow-unauthenticated \
-  --set-env-vars GOOGLE_OAUTH_CLIENT_ID=<the Add-on's OAuth client ID>,VERBATIM_DISABLE_DOCS=1 \
-  --set-secrets OPENROUTER_API_KEY=openrouter-api-key:latest,BACKEND_SHARED_SECRET=backend-shared-secret:latest
+  --set-env-vars="VERBATIM_DISABLE_DOCS=1" \
+  --set-secrets="OPENROUTER_API_KEY=openrouter-api-key:latest,BACKEND_SHARED_SECRET=backend-shared-secret:latest" \
+  --project=verbatim-501715
 ```
 
 Notes on that command:
 
 - `GOOGLE_OAUTH_CLIENT_ID` is a plain env var, not a Secret Manager secret — it's a public client identifier (not sensitive), unlike `OPENROUTER_API_KEY`.
 - `VERBATIM_DISABLE_DOCS=1` turns off FastAPI's `/docs`/`/redoc`/`/openapi.json` — no reason to hand an internet-reachable deployment a free map of its API surface. Left enabled locally (`uv run verbatim-server` with no env override) for dev convenience.
-- `--allow-unauthenticated` is a deliberate v1 choice: the real security boundary is the app-level tokeninfo check in `token_validator.py` (#21) plus the `BACKEND_SHARED_SECRET` header check in `http_api.py` (a cheap first-line filter against scanning/probing, checked before that tokeninfo network call even happens), not Cloud Run's own IAM-based invoker auth. Requiring the latter too would mean the Add-on also needs to mint and forward a Google-signed ID token audienced to this specific Cloud Run service — a second, separate auth concern from the OAuth access token `token_validator.py` already checks. Not solved here; flagged for whenever this deployment is exposed beyond internal testing.
+- **On Windows PowerShell**, quote `--set-env-vars`/`--set-secrets` values explicitly (as above) — passing them unquoted through `gcloud`'s `.ps1` wrapper mangles comma-separated key=value lists (observed directly: a two-entry `--set-secrets` list arrived at gcloud with one entry's key dropped and the two joined by a space instead of a comma, crashing with `Invalid secret spec`).
+- `--allow-unauthenticated` is a deliberate choice, not an oversight: the real security boundary is the app-level tokeninfo check in `token_validator.py` (#21) plus the `BACKEND_SHARED_SECRET` header check in `http_api.py` (a cheap first-line filter against scanning/probing, checked before that tokeninfo network call even happens), not Cloud Run's own IAM-based invoker auth. Requiring the latter too would mean the Add-on also needs to mint and forward a Google-signed ID token audienced to this specific Cloud Run service — a second, separate auth concern from the OAuth access token `token_validator.py` already checks, and Apps Script has no clean way to produce one without embedding a service-account key. A real fix (an internal auth-proxy Cloud Run service sitting in front of this one, itself requiring IAM auth) is tracked as a deliberate follow-up on [#33](https://github.com/hirekarl/verbatim/issues/33), not solved here.
 - `openrouter-api-key` and `backend-shared-secret` must already exist as Secret Manager secrets in the target project (`gcloud secrets create <name> --data-file=-`), and the Cloud Run service's runtime service account needs `roles/secretmanager.secretAccessor` on each.
 
 ## 7. Knowledge-base gap
