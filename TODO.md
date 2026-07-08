@@ -73,7 +73,7 @@ Tracked as [milestone "Workspace Add-on Migration"](https://github.com/hirekarl/
 - [x] [#18](https://github.com/hirekarl/verbatim/issues/18) Add knowledge-base coverage for Apps Script / CardService / Add-on OAuth *(merged in #26)*
 - [x] [#19](https://github.com/hirekarl/verbatim/issues/19) `docs_client`: add `from_access_token()` auth path for hosted use — depends on #18 *(merged in #27)*
 - [x] [#24](https://github.com/hirekarl/verbatim/issues/24) Resolve open sequencing questions before starting the migration — resolved as a comment on the issue and in `docs/workspace-addon-migration.md` §9
-- [ ] [#20](https://github.com/hirekarl/verbatim/issues/20) Stand up HTTP entrypoint wrapping `run_agent()` — depends on #19; CLI-retention amendment recorded as a comment on the issue
-- [ ] [#21](https://github.com/hirekarl/verbatim/issues/21) Validate inbound Add-on bearer tokens before trusting them — depends on #20
+- [x] [#20](https://github.com/hirekarl/verbatim/issues/20) Stand up HTTP entrypoint wrapping `run_agent()` — depends on #19; CLI-retention amendment recorded as a comment on the issue *(merged in #28)*
+- [x] [#21](https://github.com/hirekarl/verbatim/issues/21) Validate inbound Add-on bearer tokens before trusting them — depends on #20
 - [ ] [#22](https://github.com/hirekarl/verbatim/issues/22) Build Editor Add-on shell: manifest + CardService sidebar + UrlFetchApp call — depends on #20, #21
 - [ ] [#23](https://github.com/hirekarl/verbatim/issues/23) Containerize backend and deploy to Cloud Run — depends on #20
