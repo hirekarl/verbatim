@@ -1068,6 +1068,52 @@ class TestGoogleDocsClientFromLocalCredentials:
         assert client._drive_service is fake_drive_service
 
 
+class TestGoogleDocsClientFromAccessToken:
+    """Tests that from_access_token wires a bearer token into build()."""
+
+    def test_builds_docs_v1_service_with_credentials_from_the_token(
+        self, mocker: MockerFixture
+    ) -> None:
+        """from_access_token wraps the token in Credentials and builds docs v1."""
+        fake_creds = MagicMock()
+        fake_service = MagicMock()
+        mock_credentials_cls = mocker.patch(
+            "verbatim.docs_client.Credentials", return_value=fake_creds
+        )
+        mock_build = mocker.patch(
+            "verbatim.docs_client.build", return_value=fake_service
+        )
+
+        client = GoogleDocsClient.from_access_token("fake-token")
+
+        mock_credentials_cls.assert_called_once_with(token="fake-token")
+        mock_build.assert_called_once_with("docs", "v1", credentials=fake_creds)
+        assert client._service is fake_service
+        assert client._drive_service is None
+
+    def test_also_builds_drive_v3_service_when_include_drive_is_true(
+        self, mocker: MockerFixture
+    ) -> None:
+        """include_drive=True also builds a Drive v3 service with the same creds."""
+        fake_creds = MagicMock()
+        fake_docs_service = MagicMock()
+        fake_drive_service = MagicMock()
+        mocker.patch("verbatim.docs_client.Credentials", return_value=fake_creds)
+        mock_build = mocker.patch(
+            "verbatim.docs_client.build",
+            side_effect=[fake_docs_service, fake_drive_service],
+        )
+
+        client = GoogleDocsClient.from_access_token("fake-token", include_drive=True)
+
+        assert mock_build.call_args_list == [
+            mocker.call("docs", "v1", credentials=fake_creds),
+            mocker.call("drive", "v3", credentials=fake_creds),
+        ]
+        assert client._service is fake_docs_service
+        assert client._drive_service is fake_drive_service
+
+
 class TestGoogleDocsClientCache:
     """Tests the caching and invalidation behavior of GoogleDocsClient."""
 
