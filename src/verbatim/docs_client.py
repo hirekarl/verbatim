@@ -370,6 +370,32 @@ class GoogleDocsClient:
         """
         self._service = service
         self._drive_service = drive_service
+        self._doc_cache: dict[str, dict[str, Any]] = {}
+
+    def _get_cached_document(self, document_id: str) -> dict[str, Any]:
+        """Fetch a document, retrieving from cache if present.
+
+        Args:
+            document_id: The document ID to fetch.
+
+        Returns:
+            The raw document JSON payload.
+        """
+        if document_id not in self._doc_cache:
+            self._doc_cache[document_id] = _fetch_document(self._service, document_id)
+        return self._doc_cache[document_id]
+
+    def clear_cache(self, document_id: str | None = None) -> None:
+        """Clear cached documents.
+
+        Args:
+            document_id: If specified, clears only the cache for this document ID.
+                If None, clears all cached documents.
+        """
+        if document_id is not None:
+            self._doc_cache.pop(document_id, None)
+        else:
+            self._doc_cache.clear()
 
     @classmethod
     def from_local_credentials(
@@ -419,7 +445,7 @@ class GoogleDocsClient:
         Returns:
             The document's title, body text, and headings.
         """
-        document = _fetch_document(self._service, document_id)
+        document = self._get_cached_document(document_id)
         title, body_text, headings = _extract_title_body_and_headings(document)
         return DocumentContent(
             document_id=document_id,
@@ -438,7 +464,7 @@ class GoogleDocsClient:
         Returns:
             The brief's title, body text, and headings.
         """
-        document = _fetch_document(self._service, brief_id)
+        document = self._get_cached_document(brief_id)
         title, body_text, headings = _extract_title_body_and_headings(document)
         return CampaignContext(
             document_id=brief_id,
@@ -496,7 +522,7 @@ class GoogleDocsClient:
             AmbiguousMatchError: ``matched_text`` appears more than once.
             DocsClientError: The document fetch or batch update failed.
         """
-        document = _fetch_document(self._service, document_id)
+        document = self._get_cached_document(document_id)
         start, end = _locate_document_range(document, matched_text)
 
         if self._drive_service is not None and self._can_edit_directly(document_id):
@@ -556,6 +582,7 @@ class GoogleDocsClient:
             requests,
             f"Failed to create suggestion in document: {document_id}",
         )
+        self.clear_cache(document_id)
 
     def create_inline_comment(
         self, document_id: str, matched_text: str, comment: str
@@ -589,7 +616,7 @@ class GoogleDocsClient:
                 "GoogleDocsClient with drive_service or "
                 "from_local_credentials(include_drive=True)."
             )
-        document = _fetch_document(self._service, document_id)
+        document = self._get_cached_document(document_id)
         start, end = _locate_document_range(document, matched_text)
         body = {"content": f'Re: "{matched_text}"\n\n{comment}'}
         try:
@@ -618,3 +645,20 @@ class GoogleDocsClient:
                 ],
                 f"Failed to highlight matched text in document: {document_id}",
             )
+            self.clear_cache(document_id)
+
+    def list_comments(self, document_id: str) -> list[dict[str, Any]]:
+        """List comments on a Google Drive file.
+
+        To be implemented by Christina as part of her post-demo rotation.
+
+        Args:
+            document_id: The document ID to fetch comments for.
+
+        Returns:
+            A list of comment dictionaries.
+
+        Raises:
+            NotImplementedError: Always, until implemented.
+        """
+        raise NotImplementedError("Christina's rotation task")

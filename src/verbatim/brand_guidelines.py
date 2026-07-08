@@ -14,18 +14,19 @@ class BrandGuidelines:
         Args:
             filepath: Path to the brand_guidelines.json file. If None, uses the
                 default data/brand_guidelines.json bundled with this package.
-
-        Raises:
-            FileNotFoundError: The specified file doesn't exist.
-            ValueError: The file contains invalid JSON.
-            KeyError: The JSON is missing required root-level keys.
         """
         if filepath is None:
             # Default to the bundled data file
             filepath = Path(__file__).parent / "data" / "brand_guidelines.json"
         self.filepath = Path(filepath)
         self.data: dict[str, Any] = {}
-        self.load()
+        self.is_valid = True
+        self.error_message: str | None = None
+        try:
+            self.load()
+        except (FileNotFoundError, ValueError, KeyError, TypeError) as err:
+            self.is_valid = False
+            self.error_message = str(err)
 
     def load(self) -> None:
         """Load and validate the brand guidelines JSON file."""

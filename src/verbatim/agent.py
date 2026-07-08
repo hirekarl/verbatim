@@ -20,6 +20,28 @@ class AgentRunResult:
     stopped_due_to_max_rounds: bool = False
 
 
+def _find_anchor_text(body_text: str) -> str | None:
+    """Find a unique substring in body_text to anchor a warning comment on."""
+    if not body_text:
+        return None
+    # Try lines/paragraphs first
+    paragraphs = [p.strip() for p in body_text.split("\n") if p.strip()]
+    for p in paragraphs:
+        if body_text.count(p) == 1:
+            return p
+    # If no whole paragraph is unique, try sentences or words
+    words = body_text.split()
+    for w in words:
+        if body_text.count(w) == 1:
+            return w
+    # Fallback to the first 20 characters if unique
+    if len(body_text) >= 20:
+        candidate = body_text[:20]
+        if body_text.count(candidate) == 1:
+            return candidate
+    return None
+
+
 def run_agent(
     docs_client: GoogleDocsClient,
     llm_client: OpenRouterClient,
@@ -52,11 +74,44 @@ def run_agent(
     """
     document = docs_client.get_document_content(document_id)
     campaign = docs_client.get_campaign_context(brief_id)
-    guidelines_block = brand_guidelines.format_for_llm_prompt(
-        target_channel=target_channel
-    )
-    evaluator = BrandGuidelinesEvaluator(guidelines_path=str(brand_guidelines.filepath))
-    violations = evaluator.evaluate(document.body_text, channel=target_channel)
+
+    if not brand_guidelines.is_valid:
+        warning_msg = (
+            f"Warning: Brand guidelines file "
+            f"'{brand_guidelines.filepath.name}' is missing or corrupt "
+            f"({brand_guidelines.error_message}). "
+            f"Audit conducted using only the Campaign Brief."
+        )
+        anchor = _find_anchor_text(document.body_text)
+        if anchor:
+            try:
+                docs_client.create_inline_comment(
+                    document_id=document_id,
+                    matched_text=anchor,
+                    comment=warning_msg,
+                )
+                # Clear cache and refetch because document has been updated
+                docs_client.clear_cache(document_id)
+                document = docs_client.get_document_content(document_id)
+            except Exception:
+                pass
+
+        guidelines_block = (
+            "=== BRAND VOICE & STYLE GUIDELINES ===\n"
+            "[WARNING] Brand voice and style guidelines are unavailable because "
+            "the guidelines file is missing or invalid. Evaluate the document "
+            "against the Campaign Brief and common-sense copywriting rules only."
+        )
+        violations = []
+    else:
+        guidelines_block = brand_guidelines.format_for_llm_prompt(
+            target_channel=target_channel
+        )
+        evaluator = BrandGuidelinesEvaluator(
+            guidelines_path=str(brand_guidelines.filepath)
+        )
+        violations = evaluator.evaluate(document.body_text, channel=target_channel)
+
     system_prompt = build_system_prompt(
         guidelines_block, document, campaign, violations=violations
     )

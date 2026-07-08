@@ -365,3 +365,53 @@ class TestRunAgent:
         assert result.stopped_due_to_max_rounds is True
         assert llm_client.complete_chat.call_count == 3
         assert result.suggestions_made == 3
+
+    def test_handles_invalid_brand_guidelines_gracefully(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        mocker: MockerFixture,
+    ) -> None:
+        """If guidelines are invalid, warn in-doc and fall back."""
+        bad_guidelines = MagicMock(spec=BrandGuidelines)
+        bad_guidelines.is_valid = False
+        bad_guidelines.error_message = "File is corrupt"
+        bad_guidelines.filepath = MagicMock()
+        bad_guidelines.filepath.name = "brand_guidelines.json"
+
+        # Mock build_system_prompt to verify the block
+        mock_build = mocker.patch("verbatim.agent.build_system_prompt")
+        mock_build.return_value = "System Prompt Content"
+
+        llm_client.complete_chat.return_value = _no_tool_calls_result()
+
+        result = run_agent(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            brief_id="brief-id",
+            brand_guidelines=bad_guidelines,
+        )
+
+        assert result.suggestions_made == 0
+        assert result.comments_made == 0
+
+        # Verify comment creation for warning
+        expected_comment = (
+            "Warning: Brand guidelines file 'brand_guidelines.json' "
+            "is missing or corrupt (File is corrupt). "
+            "Audit conducted using only the Campaign Brief."
+        )
+        docs_client.create_inline_comment.assert_called_once_with(
+            document_id="doc-id",
+            matched_text="Big News! Feature helps you.",
+            comment=expected_comment,
+        )
+        docs_client.clear_cache.assert_called_once_with("doc-id")
+
+        # Verify prompt builder call uses fallback block
+        mock_build.assert_called_once()
+        args = mock_build.call_args.args
+        kwargs = mock_build.call_args.kwargs
+        assert "[WARNING] Brand voice and style guidelines are unavailable" in args[0]
+        assert kwargs.get("violations") == []
