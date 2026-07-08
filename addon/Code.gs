@@ -13,7 +13,15 @@ function onHomepage(e) {
 }
 
 function buildAuditCard(e) {
-  const documentId = e && e.docs && e.docs.id;
+  const documentId = extractDocId(e && e.docs && e.docs.id);
+  const defaultBriefId =
+    PropertiesService.getScriptProperties().getProperty('DEFAULT_BRIEF_ID') ||
+    '';
+
+  const briefIdInput = CardService.newTextInput()
+    .setFieldName('briefId')
+    .setTitle('Campaign Brief (Doc ID or share link)')
+    .setValue(defaultBriefId);
 
   const button = CardService.newTextButton()
     .setText('Run Verbatim Audit')
@@ -23,7 +31,9 @@ function buildAuditCard(e) {
         .setParameters({ documentId: documentId })
     );
 
-  const section = CardService.newCardSection().addWidget(button);
+  const section = CardService.newCardSection()
+    .addWidget(briefIdInput)
+    .addWidget(button);
 
   return CardService.newCardBuilder()
     .setHeader(CardService.newCardHeader().setTitle('Verbatim'))
@@ -33,9 +43,10 @@ function buildAuditCard(e) {
 
 function runAudit(e) {
   const documentId = e.parameters.documentId;
+  const briefId = extractDocId(e.formInput.briefId);
 
   try {
-    const result = callVerbatimBackend(documentId);
+    const result = callVerbatimBackend(documentId, briefId);
     return CardService.newActionResponseBuilder()
       .setNavigation(
         CardService.newNavigation().pushCard(buildResultCard(result))
@@ -69,6 +80,17 @@ function buildResultCard(result) {
     .setHeader(CardService.newCardHeader().setTitle('Verbatim — Results'))
     .addSection(section)
     .build();
+}
+
+function extractDocId(input) {
+  if (!input) {
+    return input;
+  }
+  var trimmed = input.trim();
+  // Google Docs/Sheets/Slides/Drive share URLs all carry the ID as the
+  // path segment right after "/d/" (e.g. .../document/d/<ID>/edit).
+  var match = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : trimmed;
 }
 
 function buildErrorCard(err) {
