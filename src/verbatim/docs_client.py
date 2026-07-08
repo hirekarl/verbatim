@@ -436,6 +436,35 @@ class GoogleDocsClient:
         )
         return cls(service=service, drive_service=drive_service)
 
+    @classmethod
+    def from_access_token(
+        cls, token: str, include_drive: bool = False
+    ) -> "GoogleDocsClient":
+        """Build a client from a bearer token handed to a hosted backend per-request.
+
+        For a Workspace Add-on backend: the caller (an Apps Script Add-on via
+        ``ScriptApp.getOAuthToken()``) already holds a valid OAuth access
+        token for the current user, so no local consent flow or token cache
+        is needed here — this wraps the token directly and builds the same
+        Docs (and optionally Drive) services ``from_local_credentials`` does.
+
+        Args:
+            token: A valid Google OAuth access token, forwarded by the
+                caller on each request.
+            include_drive: Also build a Drive API v3 service from the same
+                token, required for ``create_inline_comment`` support.
+
+        Returns:
+            A GoogleDocsClient backed by an authenticated Docs API v1 service
+            (and a Drive API v3 service, if ``include_drive`` is set).
+        """
+        credentials = Credentials(token=token)  # type: ignore[no-untyped-call]
+        service = build("docs", "v1", credentials=credentials)
+        drive_service = (
+            build("drive", "v3", credentials=credentials) if include_drive else None
+        )
+        return cls(service=service, drive_service=drive_service)
+
     def get_document_content(self, document_id: str) -> DocumentContent:
         """Fetch and parse the audited document's content.
 
