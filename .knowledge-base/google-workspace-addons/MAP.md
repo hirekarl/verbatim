@@ -6,7 +6,7 @@
 
 ## Leaves
 
-- [`concept-appsscript-manifest.md`](concept-appsscript-manifest.md) — the `appsscript.json` manifest: `oauthScopes`, `addOns.common`/`addOns.editors` config for a Docs Editor Add-on.
+- [`concept-appsscript-manifest.md`](concept-appsscript-manifest.md) — the `appsscript.json` manifest: `oauthScopes`, `addOns.common`/`addOns.docs` config for a Docs Editor Add-on.
 - [`concept-cardservice-ui.md`](concept-cardservice-ui.md) — `CardService`: building the sidebar UI (`Card`, `CardHeader`, `CardSection`, widgets, the homepage-trigger pattern).
 - [`concept-oauth-scopes-and-triggers.md`](concept-oauth-scopes-and-triggers.md) — the Add-on OAuth model (`ScriptApp.getOAuthToken()`, install/runtime triggers) and how it differs from the installed-app flow `src/verbatim/docs_client.py` uses today.
 - [`concept-urlfetchapp.md`](concept-urlfetchapp.md) — `UrlFetchApp.fetch()`: how the Add-on shell calls out to Verbatim's Python backend over HTTPS.
