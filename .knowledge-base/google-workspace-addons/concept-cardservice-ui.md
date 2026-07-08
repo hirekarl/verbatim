@@ -49,7 +49,7 @@ function runAudit(e) {
 
 - **`CardBuilder` / `CardHeader` / `CardSection`** — a `Card` is one or more sections; each section holds widgets, added top to bottom.
 - **`TextButton`** — the "Run Verbatim Audit" trigger. `setOnClickAction` binds it to a named script function via `CardService.newAction()`.
-- **`TextInput`** — if v1 needs a brief-ID field in the sidebar rather than a hardcoded/config value (open question, `docs/workspace-addon-migration.md` §9 / issue #24), this is the widget: `CardService.newTextInput().setFieldName("briefId")...`. Field values come back in the click handler's event object as `e.formInput.briefId`.
+- **`TextInput`** — used in `addon/Code.gs` for the brief-ID field: `CardService.newTextInput().setFieldName("briefId")...`. Field values come back in the click handler's event object as `e.formInput.briefId`. Issue #24's original resolution deferred this to a hardcoded/config value for v1, but Karl reconsidered before the Add-on was actually tested — see `addon/README.md`'s "Brief ID input" section.
 - **`ActionResponseBuilder` + `Navigation.pushCard()`** — how a click handler updates the UI: not by mutating the existing card, but by pushing a new one onto the sidebar's navigation stack. `popCard()`/`popToRoot()` exist for going back.
 - **`TextParagraph`** — simplest way to render the backend's JSON response (formatted as a summary string) back into the card, per the shell's job #3 in `MAP.md`.
 
