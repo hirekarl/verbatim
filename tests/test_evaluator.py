@@ -1016,3 +1016,139 @@ class TestBrandGuidelinesEvaluator:
                 and ("heritage" in v.message.lower() or "race" in v.message.lower())
             ]
             assert len(race_violations) == 0, f"Should not flag: {text}"
+
+    def test_decimal_numbers_not_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that decimal fractions are not flagged as needing commas."""
+        test_cases = [
+            "The version is 1.2345.",
+            "Pi is approximately 3.14159.",
+            "The price is $99.9999.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            number_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style" and "comma" in v.message.lower()
+            ]
+            assert len(number_violations) == 0, f"Should not flag decimal: {text}"
+
+    def test_years_not_flagged(self, evaluator: BrandGuidelinesEvaluator) -> None:
+        """Test that years in context are not flagged as needing commas."""
+        test_cases = [
+            "In 2026, we launched our product.",
+            "Since 1999, we've been growing.",
+            "The company was established in 2020.",
+            "Popular in the 1990s.",
+            "Founded circa 1850.",
+            "Class of 2024 graduates.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            number_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style" and "comma" in v.message.lower()
+            ]
+            assert len(number_violations) == 0, f"Should not flag year: {text}"
+
+    def test_curly_quotes_flagged(self, evaluator: BrandGuidelinesEvaluator) -> None:
+        """Test that curly/smart quotes are detected for punctuation placement."""
+        # Curly quotes: chr(8220) is " and chr(8221) is "
+        left_quote = chr(8220)
+        right_quote = chr(8221)
+        test_cases = [
+            f"She said {left_quote}hello{right_quote}. Then left.",
+            f"The feature is {left_quote}automation{right_quote}, which helps.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            quote_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "quotation" in v.message.lower()
+            ]
+            assert len(quote_violations) > 0, f"Should flag curly quotes issue: {text}"
+
+    def test_plural_gendered_terms_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that plural gendered terms are detected."""
+        test_cases = [
+            ("We hired three businessmen.", "businesspeople"),
+            ("The waitresses were friendly.", "servers"),
+            ("Several policemen responded.", "police officers"),
+        ]
+
+        for text, _expected in test_cases:
+            violations = evaluator.evaluate(text)
+            gender_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "gender-neutral" in v.message.lower()
+            ]
+            assert len(gender_violations) > 0, f"Should flag plural term in: {text}"
+
+    def test_guys_with_comma_flagged(self, evaluator: BrandGuidelinesEvaluator) -> None:
+        """Test that 'guys' with comma is detected."""
+        test_cases = [
+            "Hey, guys!",
+            "Thanks, guys, for your help.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            guys_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style" and "guys" in v.message.lower()
+            ]
+            assert len(guys_violations) > 0, f"Should flag 'guys' with comma: {text}"
+
+    def test_lowercase_heritage_terms_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that lowercase hyphenated heritage terms are detected."""
+        test_cases = [
+            "Our asian-american community.",
+            "The african-american experience.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            heritage_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "heritage" in v.message.lower()
+            ]
+            assert len(heritage_violations) > 0, (
+                f"Should flag lowercase heritage: {text}"
+            )
+
+    def test_singular_race_terms_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that singular race terms are detected."""
+        test_cases = [
+            "Support for black community.",
+            "A black entrepreneur founded it.",
+            "The White population grew.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            race_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and ("black" in v.message.lower() or "white" in v.message.lower())
+            ]
+            assert len(race_violations) > 0, f"Should flag singular race term: {text}"

@@ -502,7 +502,7 @@ class BrandGuidelinesEvaluator:
         ]
 
         for pattern, correct_form in heritage_patterns:
-            matches = re.finditer(pattern, text)
+            matches = re.finditer(pattern, text, re.IGNORECASE)
             for match in matches:
                 violations.append(
                     Violation(
@@ -510,24 +510,28 @@ class BrandGuidelinesEvaluator:
                         severity="warning",
                         message=(
                             "Remove hyphen from dual heritage references "
-                            "(use 'Asian American', not 'Asian-American')"
+                            f"(use '{correct_form}', not '{match.group()}')"
                         ),
                         matched_text=match.group(),
                         suggestion=correct_form,
                     )
                 )
 
-        # Check for lowercase 'black' when likely referring to race/people
-        # Pattern matches 'black' when followed by words like communities,
-        # people, entrepreneurs, etc.
-        black_pattern = (
-            r"\bblack\s+(communities|people|entrepreneurs|individuals|"
-            r"Americans|families|businesses|leaders|voices|experiences|culture)"
+        # Context words to check if black/white refers to race/people
+        race_context = (
+            r"(?:communit(?:y|ies)|people|person|individual(?:s)?|"
+            r"American(?:s)?|famil(?:y|ies)|business(?:es)?|entrepreneur(?:s)?|"
+            r"leader(?:s)?|voice(?:s)?|experience(?:s)?|culture(?:s)?|"
+            r"man|men|woman|women|child(?:ren)?|youth|student(?:s)?|"
+            r"professional(?:s)?|worker(?:s)?|writer(?:s)?|artist(?:s)?|"
+            r"population(?:s)?|neighborhood(?:s)?)"
         )
-        matches = re.finditer(black_pattern, text, re.IGNORECASE)
 
+        black_pattern = r"\bblack\s+" + race_context
+        matches = re.finditer(black_pattern, text, re.IGNORECASE)
         for match in matches:
-            if match.group().startswith("black"):  # lowercase 'black'
+            matched_word = match.group().split()[0]
+            if matched_word == "black":  # Case-sensitive check for lowercase
                 violations.append(
                     Violation(
                         category="formatting_and_style",
@@ -537,16 +541,11 @@ class BrandGuidelinesEvaluator:
                             "in the African diaspora"
                         ),
                         matched_text=match.group(),
-                        suggestion=match.group().replace("black", "Black", 1),
+                        suggestion=match.group().replace(matched_word, "Black", 1),
                     )
                 )
 
-        # Check for uppercase 'White' when referring to race
-        # Pattern matches 'White' when followed by race-related context words
-        white_pattern = (
-            r"\bWhite\s+(communities|people|entrepreneurs|individuals|"
-            r"Americans|families|businesses|leaders|voices|experiences|culture)"
-        )
+        white_pattern = r"\bWhite\s+" + race_context
         matches = re.finditer(white_pattern, text)
 
         for match in matches:
@@ -561,6 +560,39 @@ class BrandGuidelinesEvaluator:
             )
 
         return violations
+
+    def _is_likely_year(
+        self, text: str, match_start: int, match_end: int, matched_val: str
+    ) -> bool:
+        """Helper to determine if a 4-digit number represents a year in context."""
+        if len(matched_val) != 4:
+            return False
+        try:
+            val = int(matched_val)
+            if not (1000 <= val <= 2999):
+                return False
+        except ValueError:
+            return False
+
+        # Trailing 's' for decades (e.g. 1990s)
+        if match_end < len(text) and text[match_end] == "s":
+            return True
+
+        # Preceding context checks
+        pre_text = text[max(0, match_start - 25) : match_start].lower().strip()
+        year_markers = [
+            r"\b(in|since|during|by|before|after|year|est\.?|established|circa|class\s+of)$",
+            r"\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)$",
+            r"\b\d{1,2}(?:st|nd|rd|th)?$",  # e.g., "July 4" or "25 Dec"
+        ]
+        for marker in year_markers:
+            if re.search(marker, pre_text):
+                return True
+
+        # Check for date boundary symbols (e.g., 2025-12-31, 12/25/2020)
+        if match_start > 0 and text[match_start - 1] in "-/.":
+            return True
+        return match_end < len(text) and text[match_end] in "-/."
 
     def _check_number_formatting(self, text: str) -> list[Violation]:
         """Check for incorrect number and time formatting.
@@ -577,18 +609,16 @@ class BrandGuidelinesEvaluator:
         """
         violations: list[Violation] = []
 
-        # Check for numbers >= 1000 without commas
-        # Pattern matches 4+ digit numbers that don't already have commas
-        # Negative lookahead (?![,\d]) prevents matching if followed by comma
-        # or more digits. Negative lookbehind prevents partial matches.
-        pattern_number = r"(?<!\d)([1-9]\d{3,})(?![,\d])"
+        # Check for numbers >= 1000 without commas (ignore decimals and likely years)
+        pattern_number = r"(?<![\d.])([1-9]\d{3,})(?![,\d])"
         matches = re.finditer(pattern_number, text)
 
         for match in matches:
             number_str = match.group()
-            # Format with commas
-            formatted = f"{int(number_str):,}"
+            if self._is_likely_year(text, match.start(), match.end(), number_str):
+                continue
 
+            formatted = f"{int(number_str):,}"
             violations.append(
                 Violation(
                     category="formatting_and_style",
@@ -653,24 +683,31 @@ class BrandGuidelinesEvaluator:
         """
         violations: list[Violation] = []
 
-        # Patterns for incorrect Mailchimp spellings
-        incorrect_patterns = [
-            (r"\bMailChimp\b", "Mailchimp", "Old spelling with capital C"),
-            (r"\bmailchimp\b", "Mailchimp", "All lowercase"),
-            (r"\bMAILCHIMP\b", "Mailchimp", "All uppercase"),
-            (r"\bMail\s+Chimp\b", "Mailchimp", "Two words instead of one"),
-        ]
+        # Single regex to capture all variations (spaces, hyphens, and mixed case)
+        pattern = r"\bmail[- ]?chimp\b"
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            matched = match.group()
+            if matched != "Mailchimp":
+                # Determine detailed reason for feedback
+                if matched.lower() == "mailchimp":
+                    if matched == "MailChimp":
+                        reason = "Old spelling with capital C"
+                    elif matched.islower():
+                        reason = "All lowercase"
+                    elif matched.isupper():
+                        reason = "All uppercase"
+                    else:
+                        reason = "Incorrect capitalization"
+                else:
+                    reason = "Should be one word, not two or hyphenated"
 
-        for pattern, correct_form, reason in incorrect_patterns:
-            matches = re.finditer(pattern, text)
-            for match in matches:
                 violations.append(
                     Violation(
                         category="formatting_and_style",
                         severity="warning",
                         message=f"Incorrect Mailchimp capitalization: {reason}",
-                        matched_text=match.group(),
-                        suggestion=correct_form,
+                        matched_text=matched,
+                        suggestion="Mailchimp",
                     )
                 )
 
@@ -692,8 +729,9 @@ class BrandGuidelinesEvaluator:
         """
         violations: list[Violation] = []
 
-        # Mapping of gendered terms to gender-neutral alternatives
+        # Mapping of singular and plural gendered terms to gender-neutral alternatives
         gendered_terms = {
+            # Singular
             r"\bwaitress\b": ("server", "waitstaff"),
             r"\bwaiter\b": ("server", "waitstaff"),
             r"\bbusinessman\b": ("businessperson", "business professional"),
@@ -713,6 +751,24 @@ class BrandGuidelinesEvaluator:
             r"\bsportswoman\b": ("athlete", "sports enthusiast"),
             r"\bmanpower\b": ("workforce", "personnel"),
             r"\bmankind\b": ("humankind", "humanity"),
+            # Plural
+            r"\bwaitresses\b": ("servers", "waitstaff"),
+            r"\bwaiters\b": ("servers", "waitstaff"),
+            r"\bbusinessmen\b": ("businesspeople", "business professionals"),
+            r"\bbusinesswomen\b": ("businesspeople", "business professionals"),
+            r"\bchairmen\b": ("chairs", "chairpersons"),
+            r"\bchairwomen\b": ("chairs", "chairpersons"),
+            r"\bpolicemen\b": ("police officers", None),
+            r"\bpolicewomen\b": ("police officers", None),
+            r"\bfiremen\b": ("firefighters", None),
+            r"\bfirewomen\b": ("firefighters", None),
+            r"\bstewards\b": ("flight attendants", None),
+            r"\bstewardesses\b": ("flight attendants", None),
+            r"\bmailmen\b": ("mail carriers", "postal workers"),
+            r"\bsalesmen\b": ("salespeople", "sales representatives"),
+            r"\bsaleswomen\b": ("salespeople", "sales representatives"),
+            r"\bsportsmen\b": ("athletes", "sports enthusiasts"),
+            r"\bsportswomen\b": ("athletes", "sports enthusiasts"),
         }
 
         for pattern, (primary_suggestion, alt_suggestion) in gendered_terms.items():
@@ -733,8 +789,8 @@ class BrandGuidelinesEvaluator:
                 )
 
         # Check for "guys" when referring to groups
-        # Pattern matches common uses like "hey guys", "thanks guys", "you guys"
-        guys_pattern = r"\b(hey|hi|thank(?:s)?|you)\s+guys\b"
+        # Allow optional punctuation/comma in direct address greetings
+        guys_pattern = r"\b(hey|hi|thank(?:s)?|you)\b[\s,]*\bguys\b"
         matches = re.finditer(guys_pattern, text, re.IGNORECASE)
         for match in matches:
             violations.append(
@@ -781,11 +837,17 @@ class BrandGuidelinesEvaluator:
         """
         violations: list[Violation] = []
 
-        # Pattern 1: Period outside closing quote: "word".
-        # Matches: "text". or "text".  (with optional space after period)
-        pattern_period = r'"([^"]+)"\s*\.'
-        matches = re.finditer(pattern_period, text)
+        # Match either straight quotes or curly/smart quotes
+        # Character class includes: " (straight), " (left curly), " (right curly)
+        left_curly = chr(8220)  # "
+        right_curly = chr(8221)  # "
+        quote_chars = f'["{left_curly}{right_curly}]'
+        neg_class = f'[^"{left_curly}{right_curly}]'
 
+        pattern_period = (
+            rf"(?P<text>{quote_chars}{neg_class}+)(?P<close>{quote_chars})\s*\."
+        )
+        matches = re.finditer(pattern_period, text)
         for match in matches:
             violations.append(
                 Violation(
@@ -793,15 +855,14 @@ class BrandGuidelinesEvaluator:
                     severity="warning",
                     message="Period should go inside quotation marks",
                     matched_text=match.group(),
-                    suggestion=match.group().replace('".', '."'),
+                    suggestion=f"{match.group('text')}.{match.group('close')}",
                 )
             )
 
-        # Pattern 2: Comma outside closing quote: "word",
-        # Matches: "text", or "text",  (with optional space after comma)
-        pattern_comma = r'"([^"]+)"\s*,'
+        pattern_comma = (
+            rf"(?P<text>{quote_chars}{neg_class}+)(?P<close>{quote_chars})\s*,"
+        )
         matches = re.finditer(pattern_comma, text)
-
         for match in matches:
             violations.append(
                 Violation(
@@ -809,7 +870,7 @@ class BrandGuidelinesEvaluator:
                     severity="warning",
                     message="Comma should go inside quotation marks",
                     matched_text=match.group(),
-                    suggestion=match.group().replace('",', ',"'),
+                    suggestion=f"{match.group('text')},{match.group('close')}",
                 )
             )
 
