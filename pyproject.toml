@@ -10,15 +10,18 @@ authors = [
     { name = "Christina Ruiz" },
 ]
 dependencies = [
+    "fastapi>=0.121.2",
     "google-api-python-client>=2.198.0",
     "google-auth-httplib2>=0.4.0",
     "google-auth-oauthlib>=1.4.0",
     "openai>=2.44.0",
     "python-dotenv>=1.2.2",
+    "uvicorn[standard]>=0.38.0",
 ]
 
 [project.scripts]
 verbatim = "verbatim.cli:main"
+verbatim-server = "verbatim.http_api:run"
 
 [build-system]
 requires = ["hatchling"]
@@ -38,6 +41,7 @@ dev = [
     "mdformat",
     "mdformat-gfm",
     "pytest-mock>=3.15.1",
+    "httpx>=0.28.1",
 ]
 
 [tool.ruff]
