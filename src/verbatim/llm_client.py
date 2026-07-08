@@ -80,13 +80,17 @@ class OpenRouterClient:
         return cls(api_key=api_key, model=model)
 
     def complete_chat(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        max_tokens: int | None = 4096,
     ) -> ChatCompletionResult:
         """Run one chat-completion request/response round.
 
         Args:
             messages: The conversation so far, in OpenAI chat message format.
             tools: The function-calling tool schemas the model may invoke.
+            max_tokens: The maximum number of tokens to generate. Defaults to 4096.
 
         Returns:
             The response content (if any) and any tool calls the model made.
@@ -100,6 +104,7 @@ class OpenRouterClient:
                 model=self._model,
                 messages=cast(Any, messages),
                 tools=cast(Any, tools),
+                max_tokens=max_tokens,
             )
         except OpenAIError as err:
             raise LLMClientError("OpenRouter chat completion request failed") from err

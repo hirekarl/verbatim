@@ -130,6 +130,26 @@ See `.knowledge-base/google-docs-api/` and `.knowledge-base/google-drive-api/` f
 
    On Windows PowerShell: `$env:OPENROUTER_API_KEY = "sk-or-..."`.
 
+## CLI Usage
+
+Once bootstrapped and configured, you can run the Verbatim copy auditor directly from your command line:
+
+```sh
+uv run verbatim <document_id> <brief_id> [options]
+```
+
+### Options
+
+- `-c, --channel`: Optional target marketing channel (e.g. `email`, `blog`, `twitter`). If set, activates channel-specific rules in the evaluator.
+- `-m, --model`: OpenRouter model identifier (defaults to `google/gemini-2.5-flash`).
+- `-g, --guidelines`: Optional custom path to a `brand_guidelines.json` file.
+
+Example:
+
+```sh
+uv run verbatim 1_abc123xyz 1_brief456abc --channel email
+```
+
 ## Project structure
 
 ```text
@@ -140,10 +160,12 @@ verbatim/
 │       └── ci.yml          # lint, type-check, and test on every PR and push to main
 ├── src/verbatim/           # the installable package
 │   ├── __init__.py
-│   ├── evaluator.py        # BrandGuidelinesEvaluator: checks text against brand rules
-│   ├── brand_guidelines.py # loader for brand_guidelines.json
+│   ├── __main__.py         # runnable module entrypoint
 │   ├── agent.py            # single-pass tool-calling agent loop
+│   ├── brand_guidelines.py # loader for brand_guidelines.json
+│   ├── cli.py              # CLI entrypoint implementation
 │   ├── docs_client.py      # Google Docs/Drive API auth + read/write tool wrappers
+│   ├── evaluator.py        # BrandGuidelinesEvaluator: checks text against brand rules
 │   ├── llm_client.py       # OpenRouter chat-completions client
 │   ├── prompt.py           # system prompt assembly + tool schemas
 │   ├── py.typed
@@ -151,10 +173,12 @@ verbatim/
 │       └── brand_guidelines.json  # brand voice/style rules fixture
 ├── tests/                  # pytest suite
 │   ├── test_agent.py
+│   ├── test_cli.py
 │   ├── test_docs_client.py
 │   ├── test_llm_client.py
 │   └── test_prompt.py
 ├── .knowledge-base/        # decomposed reference docs for external APIs (map-and-leaf)
+
 ├── docs/                   # PRD and research reference docs (.docx + Markdown snapshots)
 ├── .env.example            # OPENROUTER_API_KEY template; copy to .env (git-ignored)
 ├── BOOTSTRAPPING.md        # scaffolding rationale and remaining setup work

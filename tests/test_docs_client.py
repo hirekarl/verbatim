@@ -242,8 +242,12 @@ class TestExtractTextChunks:
         chunks = _extract_text_chunks(document)
 
         assert chunks == [
-            _TextChunk(start_index=1, text="Big News!\n"),
-            _TextChunk(start_index=11, text="Our new feature helps you.\n"),
+            _TextChunk(start_index=1, text="Big News!\n", index_map=list(range(1, 11))),
+            _TextChunk(
+                start_index=11,
+                text="Our new feature helps you.\n",
+                index_map=list(range(11, 38)),
+            ),
         ]
 
     def test_skips_structural_elements_without_a_paragraph(self) -> None:
@@ -264,7 +268,13 @@ class TestExtractTextChunks:
 
         chunks = _extract_text_chunks(document)
 
-        assert chunks == [_TextChunk(start_index=1, text="After break.\n")]
+        assert chunks == [
+            _TextChunk(
+                start_index=1,
+                text="After break.\n",
+                index_map=list(range(1, 14)),
+            )
+        ]
 
 
 class TestLocateDocumentRange:

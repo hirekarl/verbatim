@@ -5,6 +5,7 @@ from typing import Any
 
 from verbatim.brand_guidelines import BrandGuidelines
 from verbatim.docs_client import DocsClientError, GoogleDocsClient
+from verbatim.evaluator import BrandGuidelinesEvaluator
 from verbatim.llm_client import OpenRouterClient, ToolCall
 from verbatim.prompt import TOOL_SCHEMAS, build_system_prompt
 
@@ -54,7 +55,11 @@ def run_agent(
     guidelines_block = brand_guidelines.format_for_llm_prompt(
         target_channel=target_channel
     )
-    system_prompt = build_system_prompt(guidelines_block, document, campaign)
+    evaluator = BrandGuidelinesEvaluator(guidelines_path=str(brand_guidelines.filepath))
+    violations = evaluator.evaluate(document.body_text, channel=target_channel)
+    system_prompt = build_system_prompt(
+        guidelines_block, document, campaign, violations=violations
+    )
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
     suggestions_made = 0
@@ -108,10 +113,18 @@ def _dispatch_tool_call(
     """
     try:
         if tool_call.name == "create_suggestion":
+            matched = tool_call.arguments["matched_text"]
+            replacement = tool_call.arguments["replacement_text"]
+            if matched == replacement:
+                return (
+                    "Suggestion matches existing text; no change needed.",
+                    0,
+                    0,
+                )
             docs_client.create_suggestion(
                 document_id=document_id,
-                matched_text=tool_call.arguments["matched_text"],
-                replacement_text=tool_call.arguments["replacement_text"],
+                matched_text=matched,
+                replacement_text=replacement,
             )
             return "Suggestion created.", 1, 0
         if tool_call.name == "create_inline_comment":
