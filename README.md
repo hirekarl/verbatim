@@ -218,6 +218,25 @@ Example:
 uv run verbatim 1_abc123xyz 1_brief456abc --channel email
 ```
 
+### HTTP usage
+
+For a hosted deployment (the eventual Workspace Add-on backend — see `docs/workspace-addon-migration.md`), the same audit logic is also exposed over HTTP. This is additive, not a replacement: `cli.py`/`uv run verbatim` above remains the local-dev/direct-run entrypoint.
+
+```sh
+uv run verbatim-server
+```
+
+This starts a FastAPI app (via uvicorn) on `PORT` (default `8080`) with a single route:
+
+```sh
+curl -X POST http://localhost:8080/audit \
+  -H "Authorization: Bearer <google-oauth-access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"document_id": "1_abc123xyz", "brief_id": "1_brief456abc", "channel": "email"}'
+```
+
+Unlike the CLI (which authenticates via a local OAuth consent flow, caching a token to `token.json`), the HTTP entrypoint expects the caller to already hold a valid Google OAuth access token and forward it in the `Authorization` header — see `GoogleDocsClient.from_access_token()`. Note that inbound bearer-token validation isn't implemented yet (tracked on [#21](https://github.com/hirekarl/verbatim/issues/21)), so this endpoint isn't safe to expose publicly until that lands.
+
 ## Reference
 
 ### Project structure
@@ -236,6 +255,7 @@ verbatim/
 │   ├── cli.py              # CLI entrypoint implementation
 │   ├── docs_client.py      # Google Docs/Drive API auth + read/write tool wrappers
 │   ├── evaluator.py        # BrandGuidelinesEvaluator: checks text against brand rules
+│   ├── http_api.py         # FastAPI HTTP entrypoint (hosted Workspace Add-on backend)
 │   ├── llm_client.py       # OpenRouter chat-completions client
 │   ├── prompt.py           # system prompt assembly + tool schemas
 │   ├── py.typed
@@ -245,6 +265,7 @@ verbatim/
 │   ├── test_agent.py
 │   ├── test_cli.py
 │   ├── test_docs_client.py
+│   ├── test_http_api.py
 │   ├── test_llm_client.py
 │   └── test_prompt.py
 ├── .knowledge-base/        # decomposed reference docs for external APIs (map-and-leaf)
