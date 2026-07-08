@@ -64,16 +64,16 @@ Karl and Christina work in disjoint files every day through the demo — no shar
 - [x] Failure-mode safeguards from PRD 3c not essential to the demo: session cache for Docs API rate-limit resilience (`GoogleDocsClient._doc_cache`, tested), graceful in-doc warning if `brand_guidelines.json` is missing/corrupt (`agent.py`, tested). *(shipped early in #9, ahead of the demo)*
 - [ ] Christina's rotation into Docs API/agent-loop territory (one self-contained tool wrapper, reviewed by Karl) — `GoogleDocsClient.list_comments()` exists as a stub raising `NotImplementedError`, with a stub test asserting that; the real implementation is still outstanding. *(scaffolded in #9)*
 - [ ] Any `formatting_and_style` rules not finished by Wednesday — just the general title/sentence-case check for body copy, tracked as [#11](https://github.com/hirekarl/verbatim/issues/11).
-- [ ] Workspace Add-on migration (fulfills the original production target from `docs/research-notes.snapshot.md` — the CLI is a demo-scoped placeholder for it): see `docs/workspace-addon-migration.md` for the direction/feasibility writeup and the checklist below. Sized as its own mini-sprint, not a quick follow-on.
+- [ ] Workspace Add-on migration (fulfills the original production target from `docs/research-notes.snapshot.md` — `cli.py` is retained as a permanent local-dev/direct-run entrypoint alongside it, not replaced): see `docs/workspace-addon-migration.md` for the direction/feasibility writeup and the checklist below. Sized as its own mini-sprint, not a quick follow-on. Started ahead of schedule (Karl-solo) on Jul 8.
 
 ## Workspace Add-on migration backlog
 
 Tracked as [milestone "Workspace Add-on Migration"](https://github.com/hirekarl/verbatim/milestone/1), labeled `workspace-addon`. Filed in dependency order — see `docs/workspace-addon-migration.md` for the full direction/feasibility writeup each issue is drawn from.
 
-- [ ] [#18](https://github.com/hirekarl/verbatim/issues/18) Add knowledge-base coverage for Apps Script / CardService / Add-on OAuth
-- [ ] [#19](https://github.com/hirekarl/verbatim/issues/19) `docs_client`: add `from_access_token()` auth path for hosted use — depends on #18
-- [ ] [#20](https://github.com/hirekarl/verbatim/issues/20) Stand up HTTP entrypoint wrapping `run_agent()` — depends on #19
+- [x] [#18](https://github.com/hirekarl/verbatim/issues/18) Add knowledge-base coverage for Apps Script / CardService / Add-on OAuth *(merged in #26)*
+- [x] [#19](https://github.com/hirekarl/verbatim/issues/19) `docs_client`: add `from_access_token()` auth path for hosted use — depends on #18 *(merged in #27)*
+- [x] [#24](https://github.com/hirekarl/verbatim/issues/24) Resolve open sequencing questions before starting the migration — resolved as a comment on the issue and in `docs/workspace-addon-migration.md` §9
+- [ ] [#20](https://github.com/hirekarl/verbatim/issues/20) Stand up HTTP entrypoint wrapping `run_agent()` — depends on #19; CLI-retention amendment recorded as a comment on the issue
 - [ ] [#21](https://github.com/hirekarl/verbatim/issues/21) Validate inbound Add-on bearer tokens before trusting them — depends on #20
 - [ ] [#22](https://github.com/hirekarl/verbatim/issues/22) Build Editor Add-on shell: manifest + CardService sidebar + UrlFetchApp call — depends on #20, #21
 - [ ] [#23](https://github.com/hirekarl/verbatim/issues/23) Containerize backend and deploy to Cloud Run — depends on #20
-- [ ] [#24](https://github.com/hirekarl/verbatim/issues/24) Resolve open sequencing questions before starting the migration — not blocking, but resolve before implementation work starts in earnest
