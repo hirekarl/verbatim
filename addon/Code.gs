@@ -23,6 +23,20 @@ function buildAuditCard(e) {
     .setTitle('Campaign Brief (Doc ID or share link)')
     .setValue(defaultBriefId);
 
+  // Only channels the evaluator actually has rules for (see
+  // src/verbatim/evaluator.py's _check_channel_constraints) -- other values
+  // are accepted by the backend but silently trigger no channel-specific
+  // checks, so there's no reason to offer them here.
+  const channelInput = CardService.newSelectionInput()
+    .setType(CardService.SelectionInputType.DROPDOWN)
+    .setFieldName('channel')
+    .setTitle('Target Channel (optional)')
+    .addItem('None', '', true)
+    .addItem('Email', 'email', false)
+    .addItem('Twitter', 'twitter', false)
+    .addItem('Facebook', 'facebook', false)
+    .addItem('Instagram', 'instagram', false);
+
   const button = CardService.newTextButton()
     .setText('Run Verbatim Audit')
     .setOnClickAction(
@@ -33,6 +47,7 @@ function buildAuditCard(e) {
 
   const section = CardService.newCardSection()
     .addWidget(briefIdInput)
+    .addWidget(channelInput)
     .addWidget(button);
 
   return CardService.newCardBuilder()
@@ -44,9 +59,10 @@ function buildAuditCard(e) {
 function runAudit(e) {
   const documentId = e.parameters.documentId;
   const briefId = extractDocId(e.formInput.briefId);
+  const channel = e.formInput.channel;
 
   try {
-    const result = callVerbatimBackend(documentId, briefId);
+    const result = callVerbatimBackend(documentId, briefId, channel);
     return CardService.newActionResponseBuilder()
       .setNavigation(
         CardService.newNavigation().pushCard(buildResultCard(result))

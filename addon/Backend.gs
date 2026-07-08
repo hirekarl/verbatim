@@ -1,18 +1,15 @@
 /**
  * Calls the Python backend's HTTP entrypoint (src/verbatim/http_api.py).
  *
- * Backend URL and target channel are read from Script Properties, so a
- * deployment can be pointed at a given backend/channel without editing
- * source. Brief ID is NOT a Script Property -- per Karl's reconsideration
- * of #24's original "hardcoded/config value" resolution, it comes from the
- * sidebar's text input (Code.gs) each run, so nothing about which campaign
- * brief to audit against is baked into the deployment.
+ * Only the backend URL and shared secret are Script Properties -- per
+ * Karl's reconsideration of #24's original "hardcoded/config value"
+ * resolution, neither the brief ID nor the target channel is baked into
+ * the deployment; both come from the sidebar (Code.gs) each run.
  */
 
-function callVerbatimBackend(documentId, briefId) {
+function callVerbatimBackend(documentId, briefId, channel) {
   const props = PropertiesService.getScriptProperties();
   const backendUrl = props.getProperty('BACKEND_URL');
-  const channel = props.getProperty('CHANNEL'); // optional
   const backendSharedSecret = props.getProperty('BACKEND_SHARED_SECRET');
 
   if (!backendUrl) {
