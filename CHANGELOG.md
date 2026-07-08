@@ -1,3 +1,9 @@
+## v0.3.0 (2026-07-08)
+
+### Feat
+
+- **http-api**: add HTTP entrypoint wrapping run_agent(), retain CLI (#28)
+
 ## v0.2.0 (2026-07-08)
 
 ### Feat
