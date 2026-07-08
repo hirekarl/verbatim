@@ -5,7 +5,7 @@ The Apps Script side of the Workspace Add-on migration (`docs/workspace-addon-mi
 ## Files
 
 - `appsscript.json` — the manifest: runtime, `oauthScopes`, and the Docs Editor Add-on registration (`homepageTrigger`). See `.knowledge-base/google-workspace-addons/concept-appsscript-manifest.md`.
-- `Code.gs` — the homepage trigger and `CardService` sidebar UI: a "Campaign Brief (Doc ID or share link)" text field, a "Run Verbatim Audit" button, and rendering results/errors back into the card. See `.knowledge-base/google-workspace-addons/concept-cardservice-ui.md`.
+- `Code.gs` — the homepage trigger and `CardService` sidebar UI: a "Campaign Brief (Doc ID or share link)" text field, a "Target Channel" dropdown, a "Run Verbatim Audit" button, and rendering results/errors back into the card. See `.knowledge-base/google-workspace-addons/concept-cardservice-ui.md`.
 - `Backend.gs` — the `UrlFetchApp` call to the Python backend, forwarding `ScriptApp.getOAuthToken()` as a bearer token. See `.knowledge-base/google-workspace-addons/concept-urlfetchapp.md`.
 
 ## Current status
@@ -24,12 +24,15 @@ This directory is the source, pushed to the Apps Script project via [`clasp`](ht
    - `BACKEND_URL` — the deployed backend's base URL (issue #23; e.g. a Cloud Run service URL — see `docs/workspace-addon-migration.md` §6 for the `Dockerfile`/`gcloud run deploy` steps). No default — the Add-on throws a clear error if unset rather than silently failing.
    - `BACKEND_SHARED_SECRET` — must match the backend's `BACKEND_SHARED_SECRET` env var exactly. A cheap first-line filter checked before the backend even looks at the `Authorization` bearer token; no default, request is rejected with a clear error if unset on either side.
    - `DEFAULT_BRIEF_ID` — optional; pre-fills the sidebar's brief-ID field so a copywriter running repeated audits against the same campaign doesn't have to retype it each time. Accepts either a raw document ID or a full Google Docs share URL (see below) — nothing about which brief to use is otherwise baked into the deployment.
-   - `CHANNEL` — optional; a target marketing channel (e.g. `email`, `blog`, `twitter`) to activate channel-specific evaluator rules. Leave unset to omit it from the request.
 1. Test via **Deploy → Test deployments** against a real Google Doc, with the backend reachable and `GOOGLE_OAUTH_CLIENT_ID`/`BACKEND_SHARED_SECRET` configured there to match this Add-on.
 
 ## Brief ID input
 
 Per Karl's reconsideration of issue #24's original "hardcoded/config value" resolution, the campaign brief is **not** a fixed Script Property — the sidebar has a text field for it (`CardService.newTextInput`, per `.knowledge-base/google-workspace-addons/concept-cardservice-ui.md`), read fresh on every run via `e.formInput.briefId`. `Code.gs`'s `extractDocId()` accepts either a raw document ID or a full Google Docs/Drive share URL (`.../document/d/<ID>/edit`, `.../file/d/<ID>/view`, etc.) and pulls the ID out of the `/d/<ID>` path segment, so users never have to hand-strip a URL down to its ID — applied to both the brief ID and the currently-open document's ID (`e.docs.id`), even though the latter is already expected to be a clean ID from the Docs framework.
+
+## Target channel input
+
+Also not a fixed Script Property — the sidebar has a `CardService.SelectionInput` dropdown (`e.formInput.channel`) rather than free text, since the backend only recognizes a fixed, known set of channels. The dropdown's options are exactly the channels `src/verbatim/evaluator.py`'s `_check_channel_constraints` has rules for (`email`, `twitter`, `facebook`, `instagram`) plus a "None" default — any other value would silently trigger no channel-specific checks, so there's no reason to offer it as an option.
 
 ## Known limitation (flagged, not solved here)
 
