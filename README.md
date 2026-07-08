@@ -6,24 +6,33 @@ Verbatim is an AI agent that reviews draft marketing copy inside Google Docs aga
 
 - [Verbatim](#verbatim)
   - [Table of contents](#table-of-contents)
-  - [How it works](#how-it-works)
-  - [Design notes](#design-notes)
-  - [Current sprint](#current-sprint)
-  - [Team & responsibilities](#team--responsibilities)
-  - [Prerequisites](#prerequisites)
-  - [macOS setup](#macos-setup)
-  - [Windows setup](#windows-setup)
-  - [Clone & bootstrap](#clone--bootstrap)
-  - [Common commands](#common-commands)
-  - [Development workflow](#development-workflow)
-  - [Google Docs API setup](#google-docs-api-setup)
-  - [Agent (OpenRouter) setup](#agent-openrouter-setup)
-  - [CLI usage](#cli-usage)
-  - [Project structure](#project-structure)
-  - [Versioning](#versioning)
-  - [License](#license)
+  - [Overview](#overview)
+    - [How it works](#how-it-works)
+    - [Design notes](#design-notes)
+  - [Project status](#project-status)
+    - [Current sprint](#current-sprint)
+    - [Team & responsibilities](#team--responsibilities)
+  - [Setup](#setup)
+    - [Prerequisites](#prerequisites)
+    - [macOS setup](#macos-setup)
+    - [Windows setup](#windows-setup)
+    - [Clone & bootstrap](#clone--bootstrap)
+  - [Development](#development)
+    - [Common commands](#common-commands)
+    - [Development workflow](#development-workflow)
+  - [Integrations](#integrations)
+    - [Google Docs API setup](#google-docs-api-setup)
+    - [Agent (OpenRouter) setup](#agent-openrouter-setup)
+  - [Usage](#usage)
+    - [CLI usage](#cli-usage)
+  - [Reference](#reference)
+    - [Project structure](#project-structure)
+    - [Versioning](#versioning)
+    - [License](#license)
 
-## How it works
+## Overview
+
+### How it works
 
 A copywriter kicks off a check from the command line against a draft document and its campaign brief. From there the run is fully automated: Verbatim reads both documents, runs its deterministic rule checks, hands everything to the LLM as context, and lets the model post suggestions/comments directly back into the doc. Nothing is written until the copywriter reviews it.
 
@@ -49,7 +58,7 @@ flowchart TD
 
 The evaluator and the LLM cover different halves of the 7 audit categories: `BrandGuidelinesEvaluator` handles the mechanically-checkable ones (banned words, formatting/style mechanics, channel constraints) with plain regex, while the model handles the four requiring subjective judgment (tone drift, information hierarchy, CTA cadence, readability) — using the evaluator's findings as extra citable context rather than needing to reproduce them itself.
 
-## Design notes
+### Design notes
 
 A few things about how this was built that might be worth stealing if you're building something similar:
 
@@ -59,11 +68,13 @@ A few things about how this was built that might be worth stealing if you're bui
 - **"Suggested edit" requires Suggester access, not Editor.** `create_suggestion` only lands as a reviewable suggestion — the entire point, since nothing should reach the document unreviewed — if the authenticated account has Commenter/Suggester (not Editor) permission on the target doc. Editor access makes the identical API call apply the edit directly and silently instead. Found by testing against a live doc; it isn't called out anywhere obvious in Google's docs.
 - **The narrower Drive scope 404s on this project's exact use case.** `drive.file` only covers files the app itself created or the user picked via a file picker — it 404s on `comments.create` for a doc a copywriter just opens by link, which is Verbatim's whole workflow. `WRITE_SCOPES` requests the broader `drive` scope instead, confirmed live rather than assumed from the scope reference.
 
-## Current sprint
+## Project status
+
+### Current sprint
 
 See [`TODO.md`](TODO.md) for the active sprint plan — the current deadline, the day-by-day work split between Karl and Christina, and which files/components each of them (and their coding agents) should be working in.
 
-## Team & responsibilities
+### Team & responsibilities
 
 Karl and Christina split ownership of the repo by domain, not by day-to-day task, so each of them can move fast without waiting on review of the other's in-flight work — the two stay in disjoint files at any given time:
 
@@ -72,11 +83,13 @@ Karl and Christina split ownership of the repo by domain, not by day-to-day task
 
 This split isn't permanent. Christina's domain was chosen deliberately: it's self-contained and regex/pattern-based with a fast TDD feedback loop, which gives her genuine ownership of core product logic rather than docs/config busywork. She'll rotate into Docs API and agent-loop territory in small, reviewed slices as time allows, rather than all at once. See [`TODO.md`](TODO.md) for the current sprint's day-by-day split and file ownership map.
 
-## Prerequisites
+## Setup
+
+### Prerequisites
 
 This project is managed end-to-end by [`uv`](https://docs.astral.sh/uv/), which installs and pins the right Python version for you — you do not need to install Python separately. You do need `git` and `uv` themselves; setup steps for each OS are below.
 
-## macOS setup
+### macOS setup
 
 1. Install [Homebrew](https://brew.sh) if you don't already have it.
 
@@ -98,7 +111,7 @@ This project is managed end-to-end by [`uv`](https://docs.astral.sh/uv/), which 
    uv python install 3.12
    ```
 
-## Windows setup
+### Windows setup
 
 1. Install git via [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/):
 
@@ -118,7 +131,7 @@ This project is managed end-to-end by [`uv`](https://docs.astral.sh/uv/), which 
    uv python install 3.12
    ```
 
-## Clone & bootstrap
+### Clone & bootstrap
 
 ```sh
 git clone <repo-url>
@@ -129,7 +142,9 @@ uv run pre-commit install
 
 `uv sync` creates a `.venv` and installs every dependency pinned in `uv.lock`. `uv run pre-commit install` wires up the local git hooks (code quality checks on every commit, commit message format checks on every commit message).
 
-## Common commands
+## Development
+
+### Common commands
 
 Run everything through `uv run` — there's no separate virtualenv to activate.
 
@@ -142,11 +157,13 @@ Run everything through `uv run` — there's no separate virtualenv to activate.
 | `uv run pre-commit run --all-files` | Run every pre-commit hook against the whole repo                    |
 | `uv run cz commit`                  | Build a Conventional Commits-formatted commit message interactively |
 
-## Development workflow
+### Development workflow
 
 This project follows **test-driven development**: write a failing test before writing the implementation code that makes it pass. Commit messages (and PR titles once this repo is on GitHub) follow the [Conventional Commits](https://www.conventionalcommits.org/) format (`feat: ...`, `fix: ...`, `chore: ...`, `docs: ...`) — the `commitizen` pre-commit hook enforces this locally, and `uv run cz commit` will build a properly formatted message for you.
 
-## Google Docs API setup
+## Integrations
+
+### Google Docs API setup
 
 `src/verbatim/docs_client.py` reads documents via the Google Docs API using an OAuth installed-app flow (not a service account — the copywriter checks their own currently-open document, so there's nothing to pre-share). One-time setup to run it locally:
 
@@ -159,7 +176,7 @@ This project follows **test-driven development**: write a failing test before wr
 
 See `.knowledge-base/google-docs-api/` and `.knowledge-base/google-drive-api/` for decomposed reference docs on the underlying REST APIs.
 
-## Agent (OpenRouter) setup
+### Agent (OpenRouter) setup
 
 `src/verbatim/llm_client.py` runs the audit conversation through [OpenRouter](https://openrouter.ai/)'s OpenAI-compatible chat completions API.
 
@@ -179,7 +196,9 @@ See `.knowledge-base/google-docs-api/` and `.knowledge-base/google-drive-api/` f
 
    On Windows PowerShell: `$env:OPENROUTER_API_KEY = "sk-or-..."`.
 
-## CLI usage
+## Usage
+
+### CLI usage
 
 Once bootstrapped and configured, you can run the Verbatim copy auditor directly from your command line:
 
@@ -187,7 +206,7 @@ Once bootstrapped and configured, you can run the Verbatim copy auditor directly
 uv run verbatim <document_id> <brief_id> [options]
 ```
 
-### Options
+#### Options
 
 - `-c, --channel`: Optional target marketing channel (e.g. `email`, `blog`, `twitter`). If set, activates channel-specific rules in the evaluator.
 - `-m, --model`: OpenRouter model identifier (defaults to `google/gemini-2.5-flash`).
@@ -199,7 +218,9 @@ Example:
 uv run verbatim 1_abc123xyz 1_brief456abc --channel email
 ```
 
-## Project structure
+## Reference
+
+### Project structure
 
 ```text
 verbatim/
@@ -237,10 +258,10 @@ verbatim/
 └── uv.lock                 # pinned dependency versions
 ```
 
-## Versioning
+### Versioning
 
 Versioning will become fully automatic (semver bump + changelog + GitHub Release on every merge to `main`) once this repo's CI/CD is set up — see `BOOTSTRAPPING.md` for that plan. Until then, there's no manual version bump step to worry about.
 
-## License
+### License
 
 [MIT](LICENSE).
