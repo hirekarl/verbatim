@@ -16,10 +16,10 @@ Python 3.12, fully managed by `uv` (no manual venv/pip). Build backend: hatchlin
 
 ## Repo layout
 
-- `src/verbatim/` — the installable package. Includes `evaluator.py` (`BrandGuidelinesEvaluator`, checks marketing copy against brand rules) and `brand_guidelines.py` / `data/brand_guidelines.json` (brand voice/style rules loader and fixture). Both are linted/type-checked like the rest of `src/` — no `mypy`/`ruff` exclusions remain for them.
+- `src/verbatim/` — the installable package. `evaluator.py` (`BrandGuidelinesEvaluator`) and `brand_guidelines.py` / `data/brand_guidelines.json` are the deterministic rules engine; `docs_client.py` wraps the Google Docs/Drive API; `agent.py` and `prompt.py` run the LLM tool-calling loop and system-prompt assembly; `cli.py` and `http_api.py` are the two entrypoints (local CLI and hosted Workspace Add-on backend); `token_validator.py` checks inbound Add-on bearer tokens. All linted/type-checked like the rest of `src/` — no `mypy`/`ruff` exclusions remain for any of it. See README's "Project structure" for the full file tree, including `addon/` (the Apps Script Editor Add-on source).
 - `tests/` — pytest suite.
 - `.knowledge-base/` — decomposed reference docs for external APIs this project depends on (map-and-leaf structure: start at each API's `MAP.md`). Check here before guessing at Google Docs/Drive API request/response shapes, and add a leaf when a new endpoint gets used.
-- `BOOTSTRAPPING.md` — the full scaffolding runbook and rationale (branch protection, CI/CD, versioning, governance). Local tooling (this package, pre-commit, ruff/mypy config) is done; GitHub-side setup (repo creation, branch protection, CI/CD workflows, CODEOWNERS, issue/PR templates) is still outstanding — check there before assuming any of it exists.
+- `BOOTSTRAPPING.md` — the full scaffolding runbook and rationale (branch protection, CI/CD, versioning, governance). Both local tooling and GitHub-side setup (repo creation, branch protection, CI/CD workflows, CODEOWNERS, issue/PR templates) are done as of Jul 8 — only that document's own verification-checklist walkthrough is still outstanding, and it's optional/non-blocking (deferred in `TODO.md`'s post-demo backlog).
 - `TODO.md` — the live sprint plan: current deadline, the day-by-day Karl/Christina work split, file/component ownership, and what's been deliberately deferred. Check it before picking up new work so you don't duplicate or collide with the other person's in-flight work.
 
 ## Process norms
