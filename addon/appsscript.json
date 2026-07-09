@@ -10,7 +10,7 @@
   "addOns": {
     "common": {
       "name": "Verbatim",
-      "logoUrl": "https://example.com/logo.png",
+      "logoUrl": "https://raw.githubusercontent.com/hirekarl/verbatim/main/addon/icon.png",
       "layoutProperties": {
         "primaryColor": "#4285F4"
       }
