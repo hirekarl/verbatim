@@ -5,6 +5,7 @@
   },
   "ignores": [
     "docs/PRD.snapshot.md",
-    "docs/research-notes.snapshot.md"
+    "docs/research-notes.snapshot.md",
+    "CHANGELOG.md"
   ]
 }
