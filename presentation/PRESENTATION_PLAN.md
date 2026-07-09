@@ -49,46 +49,45 @@ Each line is its own list item on purpose — a plain line break collapses into 
 
 - KARL: "I'm Karl."
 - CHRISTINA: "I'm Christina. We built Verbatim for copywriters — the people who write a company's marketing emails, social posts, and web copy."
-- KARL: "On a lot of marketing teams, the lead editor spends twenty to thirty percent of their editing time just policing mechanical stuff — voice, tone, formatting — instead of the actual writing and strategy. Right before a piece goes out, it needs that check. Verbatim automates it, so that time comes back."
+- KARL: "On a lot of marketing teams, the lead editor spends twenty to thirty percent of their editing time just policing mechanical stuff — voice, tone, formatting — instead of the actual writing and strategy. Right before a piece goes out, it needs that check. Verbatim automates it, so editors get their time back."
 
 **[Slide 2 — 0:35–1:25, Christina then Karl]**
 
-- CHRISTINA: "Every piece of copy gets checked against two different things. First, a brand style guide — a company's permanent voice and rules. Always sounds like this, never says that. The one we're demoing with today is built from Mailchimp's publicly published content style guide, so it's realistic, not made up."
-- KARL: "Second, the campaign brief — what's specific to just this one piece. Who it's going to, what we want the reader to do, and by when."
+- CHRISTINA: "Every piece of copy gets checked against two different things. First, a brand style guide — a company's permanent voice and rules. Always sounds like this, never says that. The one we're demoing with today is built from Mailchimp's publicly published content style guide."
+- KARL: "Second, the campaign brief — what's specific to just this one piece? Who it's going to, what we want the reader to do, and by when."
 - CHRISTINA: "You need both. Copy that's perfectly on-brand but ignores what this campaign needs is useless. Copy that nails the ask but doesn't sound anything like the company is going to confuse people."
 - KARL: "Checking both by hand means one person holding a style guide in one hand and a brief in the other, line by line. Two reviewers won't always catch the same things, and it's slow. That's the gap Verbatim closes."
 
 **[Slide 3 — 1:25–2:05, Karl then Christina]**
 
-- KARL: "My half is getting the actual content onto the page. When a copywriter clicks 'Run Verbatim Audit' in the sidebar, with the brief and channel already filled in, Verbatim pulls the draft and the brief straight out of Google Docs — no copying and pasting into another tool."
+- KARL: "My half of the work involved getting the actual content onto the page. When a copywriter clicks 'Run Verbatim Audit' in the sidebar, with the brief and channel already filled in, Verbatim pulls the draft and the brief straight out of Google Docs — no copying and pasting into another tool."
 - CHRISTINA: "While that's happening, my evaluator runs over the text — a rules engine I built and tested against real sample copy. It checks what's black-and-white: banned words, formatting details like commas and quotation marks, and channel limits — things like Twitter's character cap, or an email subject line that's too long or too generic. None of that touches the model, it's just pattern matching."
 
 **[Slide 4 — 2:05–3:00, Christina then Karl]**
 
-- CHRISTINA: "Whatever my evaluator flags gets fed straight into the model's system prompt — the instructions that shape everything it does — as evidence it can point to, instead of guessing at the same rules a second time."
-- KARL: "That same system prompt is what makes the model judge the four things that actually need judgment, not pattern matching. Does the writing still sound like the brand, or has the tone drifted. Is the important information said first, or is it buried three paragraphs down — that's what we call information hierarchy. Is there a clear ask, and does it show up at the right moment and not too often — that's CTA cadence. CTA means 'call to action' — the part of the copy that tells someone what to actually do next, like 'sign up' or 'buy now.' And is it actually easy to read. Christina's findings, the brand guidelines, the document, and the brief all go into that one system prompt, and the model decides what to flag."
+- CHRISTINA: "Whatever my evaluator flags gets fed straight into the agent's system prompt — the instructions that shape everything it does — as evidence it can point to, instead of guessing at the same rules a second time."
+- KARL: "That same system prompt is what makes the agent judge the four things that actually need judgment, not pattern matching. Does the writing still sound like the brand, or has the tone drifted? Is the important information said first, or is it buried three paragraphs down? Is there a clear CTA, and does it show up at the right moment and not too often? CTA means 'call to action' — the part of the copy that tells someone what to actually do next, like 'sign up' or 'buy now.' And is it actually easy to read? Christina's findings, the brand guidelines, the document, and the brief all go into that one system prompt, and the agent decides what to flag."
 
 **[Slide 5 — 3:00–3:20, Karl]**
 
-- KARL: "From there the model has two moves: propose a suggested edit for a rewrite, or leave a comment for anything more structural than a simple text swap. It keeps going until it's out of things to flag or hits a round limit, then prints a summary of what it posted."
+- KARL: "From there the agent has two moves: propose a suggested edit for a rewrite, or leave a comment for anything more structural than a simple text swap. It keeps going until it's out of things to flag or hits a round limit, then prints a summary of what it posted."
 
 **[Slide 6 — 3:20–3:55, Karl then Christina]**
 
-- KARL: "This part matters most: nothing Verbatim does gets applied outright. Everything shows up as something reviewable — a suggested edit or a comment — never a silent change to the doc."
+- KARL: "Nothing Verbatim does gets applied outright. Everything shows up as something reviewable — a suggested edit or a comment — never a silent change to the doc."
 - CHRISTINA: "That's because this copy is headed for a final sign-off — nobody wants their draft rewritten out from under them. The copywriter goes through every suggestion and comment one at a time and accepts or rejects each. Only what they accept moves forward."
 
 **[Slide 7 — 3:55–4:45, alternating, then live]**
 
-- KARL: "Let's see it in the doc." (open the Verbatim sidebar on the draft; the campaign brief link is already filled in)
+- KARL: "Let's see it in a doc." (open the Verbatim sidebar on the draft; the campaign brief link is already filled in)
 - CHRISTINA: "We'll run it against Email." (pick Email from the channel dropdown, click "Run Verbatim Audit") "This is one call to our backend — the evaluator and the model both run behind the scenes, so there's a short wait."
 - KARL: "Here's what came back." (read off the sidebar's category breakdown and counts — call out whatever actually shows up, not a fixed number)
 - CHRISTINA: "And here in the doc—" (point at 2-3 of the actual suggestions or comments that landed, whatever they turn out to be)
-- KARL: "If the live call is slow or times out, we've got a recording of a clean run from rehearsal as backup."
 
 **[Slide 8 — 4:45–5:00, Karl then Christina]**
 
 - KARL: "What you just saw is running for real — the same backend, the same Add-on, live in this doc. Not a mockup."
-- CHRISTINA: "That's Verbatim."
+- CHRISTINA: "That's Verbatim. Thank you."
 
 ## C. Readiness self-check
 
