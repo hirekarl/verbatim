@@ -1,6 +1,7 @@
 """Tests for the Verbatim HTTP entrypoint."""
 
-from typing import cast
+import time
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -14,6 +15,20 @@ from verbatim.llm_client import LLMClientError
 from verbatim.token_validator import TokenValidationError
 
 _TEST_SHARED_SECRET = "test-shared-secret"
+
+
+def _poll_until_terminal(
+    client: TestClient, job_id: str, timeout: float = 5.0
+) -> dict[str, Any]:
+    """Poll GET /audit/{job_id} until the background job reaches done/error."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        response = client.get(f"/audit/{job_id}")
+        body = cast(dict[str, Any], response.json())
+        if body["status"] in ("done", "error"):
+            return body
+        time.sleep(0.01)
+    raise TimeoutError(f"job {job_id} did not reach a terminal status in {timeout}s")
 
 
 class TestAuditEndpoint:
@@ -87,8 +102,13 @@ class TestAuditEndpoint:
             headers={"Authorization": "Bearer fake-token"},
         )
 
-        assert response.status_code == 200
-        assert response.json() == {
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+        assert job_id
+
+        final = _poll_until_terminal(client, job_id)
+        assert final["status"] == "done"
+        assert final["result"] == {
             "suggestions_made": 3,
             "comments_made": 5,
             "stopped_due_to_max_rounds": False,
@@ -128,8 +148,12 @@ class TestAuditEndpoint:
             headers={"Authorization": "Bearer fake-token"},
         )
 
-        assert response.status_code == 200
-        assert response.json()["category_counts"] == {}
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+
+        final = _poll_until_terminal(client, job_id)
+        assert final["status"] == "done"
+        assert final["result"]["category_counts"] == {}
         mock_llm_client.assert_called_once_with(model="google/gemini-2.5-flash")
         mock_run_agent.assert_called_once_with(
             docs_client=mock_docs_client.return_value,
@@ -226,7 +250,7 @@ class TestAuditEndpoint:
         mock_brand_guidelines: MagicMock,
         mock_run_agent: MagicMock,
     ) -> None:
-        """A ValueError raised during the run maps to 400."""
+        """A ValueError raised inside the background job surfaces via polling."""
         mock_run_agent.side_effect = ValueError("bad channel")
 
         response = client.post(
@@ -235,7 +259,12 @@ class TestAuditEndpoint:
             headers={"Authorization": "Bearer fake-token"},
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+
+        final = _poll_until_terminal(client, job_id)
+        assert final["status"] == "error"
+        assert final["error"] == "bad channel"
 
     def test_audit_unexpected_error(
         self,
@@ -351,6 +380,54 @@ class TestAuditEndpoint:
         )
 
         assert response.status_code == 500
+
+
+class TestAuditStatusEndpoint:
+    """Tests for the GET /audit/{job_id} polling endpoint."""
+
+    @pytest.fixture(autouse=True)
+    def _shared_secret_env(
+        self, monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture
+    ) -> None:
+        """Configure a known BACKEND_SHARED_SECRET for these tests."""
+        mocker.patch("verbatim.http_api.load_dotenv")
+        monkeypatch.setenv("BACKEND_SHARED_SECRET", _TEST_SHARED_SECRET)
+
+    @pytest.fixture
+    def client(self) -> TestClient:
+        """A FastAPI test client for the audit API, with a valid shared secret."""
+        return TestClient(app, headers={BACKEND_SECRET_HEADER: _TEST_SHARED_SECRET})
+
+    def test_status_unknown_job_id(self, client: TestClient) -> None:
+        """Polling a job id that was never submitted returns 404."""
+        response = client.get("/audit/00000000-0000-0000-0000-000000000000")
+
+        assert response.status_code == 404
+
+    def test_status_missing_shared_secret_header(self) -> None:
+        """Polling without the shared secret is rejected, same as submission."""
+        client_without_default_headers = TestClient(app)
+
+        response = client_without_default_headers.get(
+            "/audit/00000000-0000-0000-0000-000000000000"
+        )
+
+        assert response.status_code == 401
+
+    def test_status_wrong_shared_secret_header(self, client: TestClient) -> None:
+        """Polling with the wrong shared secret is rejected."""
+        response = client.get(
+            "/audit/00000000-0000-0000-0000-000000000000",
+            headers={BACKEND_SECRET_HEADER: "wrong-secret"},
+        )
+
+        assert response.status_code == 401
+
+    def test_status_does_not_require_bearer_token(self, client: TestClient) -> None:
+        """No Authorization header is required -- an unknown job id still 404s."""
+        response = client.get("/audit/00000000-0000-0000-0000-000000000000")
+
+        assert response.status_code == 404
 
 
 class TestCreateApp:

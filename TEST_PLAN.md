@@ -125,7 +125,7 @@ Requires local OAuth setup (`client_secret.json`/`token.json`, see `README.md`'s
 
 ### 4.2 The Add-on sidebar — the only real end-to-end test
 
-Once Script Properties are set (`BACKEND_URL`, `BACKEND_SHARED_SECRET`, optional `DEFAULT_BRIEF_ID` — see `addon/README.md`), open a test document, run the sidebar's "Run Verbatim Audit" with a brief ID and channel from your test set. This is the only path that exercises the full deployed system: `ScriptApp.getOAuthToken()` → `token_validator.py`'s tokeninfo check → the real Cloud Run container → `run_agent()`.
+Once Script Properties are set (`BACKEND_URL`, `BACKEND_SHARED_SECRET`, optional `DEFAULT_BRIEF_ID` — see `addon/README.md`), open a test document, run the sidebar's "Run Verbatim Audit" with a brief ID and channel from your test set. This is a submit-then-poll flow, not one blocking call — `UrlFetchApp.fetch()` has a hard, non-configurable 60-second timeout (`.knowledge-base/google-workspace-addons/concept-urlfetchapp.md`), and a real audit routinely takes longer than that. Clicking "Run Verbatim Audit" submits the job and shows an in-progress card; click "Check Status" (repeatedly, if needed) until it flips to the results card. This is the only path that exercises the full deployed system: `ScriptApp.getOAuthToken()` → `token_validator.py`'s tokeninfo check → the real Cloud Run container → `run_agent()` running on a background thread → `GET /audit/{job_id}` polling for the outcome.
 
 ### 4.3 Direct HTTP against Cloud Run — auth-path testing only
 
@@ -137,7 +137,7 @@ curl -X POST https://verbatim-backend-75857425003.us-east4.run.app/audit \
   -d '{"document_id": "...", "brief_id": "...", "channel": "email"}'
 ```
 
-**Caveat, so you don't waste time on this**: `token_validator.py` checks that the bearer token's audience matches `GOOGLE_OAUTH_CLIENT_ID` — the Apps Script project's own OAuth client. A token from the CLI's local OAuth flow (a different, separate OAuth client) will fail that check with a clean 401, not because anything's broken, but because it's the wrong client's token. Use `curl` to verify the *rejection* paths (missing/wrong shared secret → 401, malformed body → 422, missing bearer token → 401) — for the actual success path with real audit results, use the Add-on (§4.2).
+**Caveat, so you don't waste time on this**: `token_validator.py` checks that the bearer token's audience matches `GOOGLE_OAUTH_CLIENT_ID` — the Apps Script project's own OAuth client. A token from the CLI's local OAuth flow (a different, separate OAuth client) will fail that check with a clean 401, not because anything's broken, but because it's the wrong client's token. Use `curl` to verify the *rejection* paths on both endpoints (missing/wrong shared secret → 401 on `POST /audit` and `GET /audit/{job_id}` alike, malformed body → 422, missing bearer token on submit → 401, unknown job id on poll → 404) — for the actual success path with real audit results, use the Add-on (§4.2). Note `GET /audit/{job_id}` only checks the shared secret, not a bearer token, so its rejection-path coverage is narrower than `POST /audit`'s.
 
 ## 5. Recording results
 

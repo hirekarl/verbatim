@@ -73,10 +73,10 @@ function runAudit(e) {
   const channel = e.formInput.channel;
 
   try {
-    const result = callVerbatimBackend(documentId, briefId, channel);
+    const jobId = submitVerbatimAudit(documentId, briefId, channel);
     return CardService.newActionResponseBuilder()
       .setNavigation(
-        CardService.newNavigation().pushCard(buildResultCard(result))
+        CardService.newNavigation().pushCard(buildInProgressCard(jobId))
       )
       .build();
   } catch (err) {
@@ -86,6 +86,71 @@ function runAudit(e) {
       )
       .build();
   }
+}
+
+function checkAuditStatus(e) {
+  const jobId = e.formInput.jobId;
+
+  try {
+    const status = pollVerbatimAudit(jobId);
+    var nextCard;
+    if (status.status === 'done') {
+      nextCard = buildResultCard(status.result);
+    } else if (status.status === 'error') {
+      nextCard = buildErrorCard({ message: status.error || 'unknown error' });
+    } else if (status.status === 'not_found') {
+      nextCard = buildErrorCard({
+        message:
+          'Job not found — the backend may have restarted. Please run the audit again.',
+      });
+    } else {
+      // 'queued' or 'running' -- still going, offer the same check-status
+      // card again. CardService has no client-side timer, so re-checking is
+      // always a deliberate click, never automatic.
+      nextCard = buildInProgressCard(jobId);
+    }
+    return CardService.newActionResponseBuilder()
+      .setNavigation(CardService.newNavigation().pushCard(nextCard))
+      .build();
+  } catch (err) {
+    return CardService.newActionResponseBuilder()
+      .setNavigation(
+        CardService.newNavigation().pushCard(buildErrorCard(err))
+      )
+      .build();
+  }
+}
+
+function buildInProgressCard(jobId) {
+  const introParagraph = CardService.newTextParagraph().setText(
+    'Audit running — this can take a few minutes (the model works through ' +
+      'up to 20 rounds of checks). Click "Check Status" to see whether ' +
+      'it’s finished.'
+  );
+
+  // Hidden-form-field pattern: click handlers are fresh invocations with no
+  // closures, so jobId has to round-trip through the next click's
+  // e.formInput the same way briefId/channel already do in buildAuditCard.
+  const jobIdInput = CardService.newTextInput()
+    .setFieldName('jobId')
+    .setTitle('Job ID')
+    .setValue(jobId);
+
+  const button = CardService.newTextButton()
+    .setText('Check Status')
+    .setOnClickAction(
+      CardService.newAction().setFunctionName('checkAuditStatus')
+    );
+
+  const section = CardService.newCardSection()
+    .addWidget(introParagraph)
+    .addWidget(jobIdInput)
+    .addWidget(button);
+
+  return CardService.newCardBuilder()
+    .setHeader(CardService.newCardHeader().setTitle('Verbatim — Running'))
+    .addSection(section)
+    .build();
 }
 
 // Fixed order matching src/verbatim/prompt.py's CATEGORIES -- rendered in

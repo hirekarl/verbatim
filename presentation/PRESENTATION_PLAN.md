@@ -31,11 +31,11 @@ Output honesty: the model's findings are not deterministic — the same draft ca
 
 **6. Checkpoint** — kept at the "what and why" level, not the API-permission mechanics. Karl: nothing Verbatim does gets applied outright — every output is something reviewable (a suggested edit or a comment), never a silent change to the doc. Christina: why it matters and what happens next — copy headed for sign-off can't be silently rewritten, so the copywriter accepts/rejects every item inline, and only accepted changes move forward.
 
-**7. Live demo (via the Add-on)** — open the Verbatim sidebar on the draft doc, paste in the campaign brief (doc ID or share link), pick a channel from the dropdown, click "Run Verbatim Audit." It's one blocking call to the backend — evaluator and model both run server-side before anything comes back — then the sidebar shows a results card (suggestions/comments posted, broken down by category) and the actual suggestions/comments land inline in the doc.
+**7. Live demo (via the Add-on)** — open the Verbatim sidebar on the draft doc, paste in the campaign brief (doc ID or share link), pick a channel from the dropdown, click "Run Verbatim Audit." The backend runs the audit in the background — evaluator and model both run server-side — so the sidebar shows an in-progress card with a "Check Status" button; click it once or twice until the results card comes back (suggestions/comments posted, broken down by category), and the actual suggestions/comments land inline in the doc.
 
 - Input: draft doc pre-loaded with `presentation/demo/draft-copy.txt`, campaign brief `presentation/demo/campaign-brief.txt`, channel = Email.
 - Expected: **[placeholder — read off whatever categories/counts the results card actually shows, and point at 2-3 real suggestions/comments in the doc]**. `presentation/demo/expected-output.md` is a backstage rehearsal reference for what the seeded draft is designed to exercise (verified against the real evaluator) — not a script to recite live, since the model's half is never guaranteed to repeat exactly.
-- Backup: a recorded run from Friday's rehearsal, in case the live call is slow or times out — `addon/README.md` flags that Apps Script's blocking call may run close to its own timeout on a long tool-calling loop.
+- Backup: a recorded run from Friday's rehearsal, in case the live call is slow or the backend is unreachable — `addon/README.md` documents why this is a submit-then-poll flow rather than one blocking call: `UrlFetchApp.fetch()` has a hard, non-configurable 60-second timeout (`.knowledge-base/google-workspace-addons/concept-urlfetchapp.md`), well under how long a real audit can take.
 
 **8. Close** — Karl: what was just demoed is running for real (Cloud Run backend, live Add-on), not a mockup. Christina: closes it out.
 
@@ -80,7 +80,7 @@ Each line is its own list item on purpose — a plain line break collapses into 
 **[Slide 7 — 3:55–4:45, alternating, then live]**
 
 - KARL: "Let's see it in a doc." (open the Verbatim sidebar on the draft; the campaign brief link is already filled in)
-- CHRISTINA: "We'll run it against Email." (pick Email from the channel dropdown, click "Run Verbatim Audit") "This is one call to our backend — the evaluator and the model both run behind the scenes, so there's a short wait."
+- CHRISTINA: "We'll run it against Email." (pick Email from the channel dropdown, click "Run Verbatim Audit") "The evaluator and the model both run behind the scenes, so we'll click 'Check Status' until it's done thinking." (click "Check Status" once or twice until the results card appears)
 - KARL: "Here's what came back." (read off the sidebar's category breakdown and counts — call out whatever actually shows up, not a fixed number)
 - CHRISTINA: "And here in the doc—" (point at 2-3 of the actual suggestions or comments that landed, whatever they turn out to be)
 
@@ -99,7 +99,7 @@ Each line is its own list item on purpose — a plain line break collapses into 
 - [x] Human-in-the-loop checkpoint pauses before highest-risk action — every write is suggestion/comment-only; nothing reaches the draft without an explicit accept in Google Docs.
 - [x] Output is something the target role would actually act on — inline suggestions/comments a copywriter reviews directly in their own doc.
 - [x] Code committed to GitHub.
-- [ ] **Add-on end-to-end path actually verified** — this is the biggest open risk now that the demo runs through the Add-on instead of the CLI. Per `addon/README.md`, the Apps Script project's Script Properties (`BACKEND_URL`, `BACKEND_SHARED_SECRET`, optionally `DEFAULT_BRIEF_ID`) still need confirming as set, and there has not yet been a real end-to-end run via **Deploy → Test deployments**. The CLI path is fully tested; the Add-on path is not, and it's now the one being demoed live.
+- [ ] **Add-on end-to-end path actually verified** — this is the biggest open risk now that the demo runs through the Add-on instead of the CLI. Per `addon/README.md`, the Apps Script project's Script Properties (`BACKEND_URL`, `BACKEND_SHARED_SECRET`, optionally `DEFAULT_BRIEF_ID`) still need confirming as set, and there has not yet been a real end-to-end run via **Deploy → Test deployments** of the new submit/"Check Status" polling flow (the direct blocking call couldn't survive real audit latency against `UrlFetchApp`'s hard 60s timeout — see `addon/README.md`'s Known limitation section). The CLI path is fully tested; the Add-on path is not, and it's now the one being demoed live.
 
 ### The presentation
 
@@ -107,6 +107,6 @@ Each line is its own list item on purpose — a plain line break collapses into 
 - [x] Each step of observe-decide-act walkable for audience, described as it will actually appear in the Add-on (sidebar click, not a terminal command).
 - [x] Checkpoint explained: where, why, what happens on yes/no — kept at the plain "reviewable, never silent" level, without the underlying API-permission mechanics.
 - [x] Live demo planned: specific input and backup, with expected output deliberately left as a live placeholder rather than a predicted result, since the model's output isn't deterministic.
-- [ ] **Demo tested at least 3 times before Saturday** — content is ready; still need to (1) paste `campaign-brief.txt` / `draft-copy.txt` into two real Google Docs, share the draft appropriately, (2) confirm the Add-on's Script Properties and run a real end-to-end test via Deploy → Test deployments (see above — not yet done at all), (3) record the rehearsal-day fallback video. All scheduled for Friday's buffer day per `TODO.md`.
+- [ ] **Demo tested at least 3 times before Saturday** — content is ready; still need to (1) paste `campaign-brief.txt` / `draft-copy.txt` into two real Google Docs, share the draft appropriately, (2) confirm the Add-on's Script Properties and run a real end-to-end test via Deploy → Test deployments, including clicking "Check Status" through to a finished result (see above — not yet done at all), (3) record the rehearsal-day fallback video. All scheduled for Friday's buffer day per `TODO.md`.
 
 The content, script, and mechanism are done. The real remaining risk is that the Add-on path — Script Properties plus one real end-to-end run — hasn't been exercised yet at all, and it's now what Saturday's live demo depends on.
