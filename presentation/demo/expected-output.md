@@ -1,6 +1,8 @@
 # Demo expected output
 
-Run: `uv run verbatim <draft_doc_id> <brief_doc_id> --channel email`
+**This is a backstage rehearsal reference, not a live script.** The live demo runs through the Workspace Add-on sidebar (see `PRESENTATION_PLAN.md` slide 7), and the model's half of the output isn't deterministic — don't recite this table or the LLM bullets below as if they're guaranteed. Use this to sanity-check a rehearsal run and to know roughly what to expect, then narrate whatever the actual run produces on Saturday.
+
+CLI equivalent, useful for offstage spot-checks: `uv run verbatim <draft_doc_id> <brief_doc_id> --channel email`
 
 Input docs: paste `campaign-brief.txt` into one Google Doc, `draft-copy.txt` into another (first line of the draft is the email subject line), grant the demo Google account Suggester/Commenter access on the draft, then swap in the real doc IDs above. Both files are seeded on purpose so every one of the 7 categories fires at least once.
 
