@@ -1,6 +1,6 @@
 """Single-pass tool-calling agent loop for auditing a Google Doc."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from verbatim.brand_guidelines import BrandGuidelines
@@ -18,6 +18,7 @@ class AgentRunResult:
     comments_made: int
     transcript: list[dict[str, Any]]
     stopped_due_to_max_rounds: bool = False
+    category_counts: dict[str, int] = field(default_factory=dict)
 
 
 def _find_anchor_text(body_text: str) -> str | None:
@@ -124,6 +125,7 @@ def run_agent(
     messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
     suggestions_made = 0
     comments_made = 0
+    category_counts: dict[str, int] = {}
     stopped_due_to_max_rounds = True
     # Tracks (tool_name, matched_text) pairs already dispatched, so the model
     # re-flagging the same span in a later round (e.g. once during its
@@ -140,11 +142,13 @@ def run_agent(
             break
 
         for tool_call in result.tool_calls:
-            outcome, made_suggestion, made_comment = _dispatch_tool_call(
+            outcome, made_suggestion, made_comment, category = _dispatch_tool_call(
                 docs_client, document_id, tool_call, seen_spans
             )
             suggestions_made += made_suggestion
             comments_made += made_comment
+            if category is not None:
+                category_counts[category] = category_counts.get(category, 0) + 1
             messages.append(
                 {
                     "role": "tool",
@@ -158,6 +162,7 @@ def run_agent(
         comments_made=comments_made,
         transcript=messages,
         stopped_due_to_max_rounds=stopped_due_to_max_rounds,
+        category_counts=category_counts,
     )
 
 
@@ -166,7 +171,7 @@ def _dispatch_tool_call(
     document_id: str,
     tool_call: ToolCall,
     seen_spans: set[tuple[str, str]],
-) -> tuple[str, int, int]:
+) -> tuple[str, int, int, str | None]:
     """Dispatch one tool call to GoogleDocsClient, returning a tool-result message.
 
     Args:
@@ -179,9 +184,15 @@ def _dispatch_tool_call(
             paragraph-by-paragraph pass.
 
     Returns:
-        A tuple of (result text for the model, suggestions made, comments made).
-        DocsClientError failures are caught and surfaced as result text rather
-        than raised, giving the model a chance to retry in the same run.
+        A tuple of (result text for the model, suggestions made, comments
+        made, category). ``category`` is the tool call's category on a real
+        successful dispatch, or ``None`` on any skip/error/unknown-tool
+        branch. The schema's ``required`` list isn't hard-enforced by
+        OpenRouter/OpenAI-style function calling, so a dispatched call
+        missing ``category`` falls back to ``"uncategorized"`` rather than
+        raising. DocsClientError failures are caught and surfaced as result
+        text rather than raised, giving the model a chance to retry in the
+        same run.
     """
     try:
         if tool_call.name == "create_suggestion":
@@ -192,29 +203,32 @@ def _dispatch_tool_call(
                     "Suggestion matches existing text; no change needed.",
                     0,
                     0,
+                    None,
                 )
             span_key = (tool_call.name, matched)
             if span_key in seen_spans:
-                return "Already flagged this text; skipping duplicate.", 0, 0
+                return "Already flagged this text; skipping duplicate.", 0, 0, None
             docs_client.create_suggestion(
                 document_id=document_id,
                 matched_text=matched,
                 replacement_text=replacement,
             )
             seen_spans.add(span_key)
-            return "Suggestion created.", 1, 0
+            category = tool_call.arguments.get("category", "uncategorized")
+            return "Suggestion created.", 1, 0, category
         if tool_call.name == "create_inline_comment":
             matched = tool_call.arguments["matched_text"]
             span_key = (tool_call.name, matched)
             if span_key in seen_spans:
-                return "Already flagged this text; skipping duplicate.", 0, 0
+                return "Already flagged this text; skipping duplicate.", 0, 0, None
             docs_client.create_inline_comment(
                 document_id=document_id,
                 matched_text=matched,
                 comment=tool_call.arguments["comment"],
             )
             seen_spans.add(span_key)
-            return "Comment created.", 0, 1
-        return f"Unknown tool: {tool_call.name}", 0, 0
+            category = tool_call.arguments.get("category", "uncategorized")
+            return "Comment created.", 0, 1, category
+        return f"Unknown tool: {tool_call.name}", 0, 0, None
     except DocsClientError as err:
-        return f"Error: {err}", 0, 0
+        return f"Error: {err}", 0, 0, None
