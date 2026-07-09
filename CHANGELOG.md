@@ -1,3 +1,9 @@
+## v0.10.1 (2026-07-09)
+
+### Fix
+
+- **addon**: fix bugs found during first live end-to-end Add-on test (#41)
+
 ## v0.10.0 (2026-07-09)
 
 ### Feat
