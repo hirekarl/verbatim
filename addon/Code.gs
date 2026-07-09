@@ -174,6 +174,25 @@ var CATEGORY_LABELS = {
   formatting_and_style: 'Formatting & Style',
   channel_constraints: 'Channel Constraints',
   banned_words_and_competitors: 'Banned Words & Competitors',
+  uncategorized: 'Uncategorized',
+};
+
+// One color per category, reused for both the count in "Breakdown by
+// category" and the quoted matched text in "Findings" below, so the two
+// sections read as one coordinated system rather than two plain lists.
+// CardService widgets only support this small HTML subset (<b>, <i>, <u>,
+// <s>, <font color>, <a>, <br>) and only in .setText() -- setTopLabel()/
+// setBottomLabel() are plain-text only, per
+// .knowledge-base/google-workspace-addons/concept-cardservice-ui.md.
+var CATEGORY_COLORS = {
+  tone_drift: '#8E24AA',
+  information_hierarchy: '#1E88E5',
+  cta_cadence: '#00897B',
+  readability: '#F4511E',
+  formatting_and_style: '#6D4C41',
+  channel_constraints: '#3949AB',
+  banned_words_and_competitors: '#C62828',
+  uncategorized: '#616161',
 };
 
 var DISCLAIMER_TEXT =
@@ -191,6 +210,26 @@ function _truncate(text, maxLength) {
   return text.length > maxLength
     ? text.slice(0, maxLength - 1) + '…'
     : text;
+}
+
+// .setText() is the only widget field that renders CardService's small HTML
+// subset -- a literal "&"/"<"/">" from real document text (e.g. "Save 20%
+// & More" or "Revenue < Cost") would otherwise be parsed as markup and
+// break or hide the rest of the string.
+function _escapeHtml(text) {
+  if (!text) {
+    return text;
+  }
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function _findingIcon(kind) {
+  return CardService.newIconImage().setIcon(
+    kind === 'suggestion' ? CardService.Icon.STAR : CardService.Icon.DESCRIPTION
+  );
 }
 
 function buildResultCard(result) {
@@ -218,31 +257,37 @@ function buildResultCard(result) {
       CardService.newTextParagraph().setText('Breakdown by category:')
     );
     nonzero.forEach(function (key) {
+      const color = CATEGORY_COLORS[key] || CATEGORY_COLORS.uncategorized;
       section.addWidget(
         CardService.newDecoratedText()
           .setTopLabel(CATEGORY_LABELS[key])
-          .setText(String(counts[key]))
+          .setText(
+            '<font color="' + color + '"><b>' + counts[key] + '</b></font>'
+          )
       );
     });
   }
 
   const findings = result.findings || [];
   if (findings.length > 0) {
-    section.addWidget(
-      CardService.newTextParagraph().setText('Findings:')
-    );
-    // Grouped in the order categories first appear in `findings`, which is
+    section.addWidget(CardService.newTextParagraph().setText('Findings:'));
+    // Listed in the order categories first appear in `findings`, which is
     // dispatch order from the agent loop -- not re-sorted by CATEGORY_ORDER,
     // so this reads as "what the agent found, in the order it found it."
     findings.forEach(function (finding) {
-      const label =
-        (CATEGORY_LABELS[finding.category] || finding.category) +
-        ' — ' +
-        (finding.kind === 'suggestion' ? 'Suggestion' : 'Comment');
+      const color =
+        CATEGORY_COLORS[finding.category] || CATEGORY_COLORS.uncategorized;
+      const quotedText =
+        '<font color="' +
+        color +
+        '"><b>“' +
+        _escapeHtml(_truncate(finding.matched_text, 80)) +
+        '”</b></font>';
       section.addWidget(
         CardService.newDecoratedText()
-          .setTopLabel(label)
-          .setText(_truncate(finding.matched_text, 80))
+          .setStartIcon(_findingIcon(finding.kind))
+          .setTopLabel(CATEGORY_LABELS[finding.category] || finding.category)
+          .setText(quotedText)
           .setBottomLabel(_truncate(finding.detail, 100))
           .setWrapText(true)
       );
