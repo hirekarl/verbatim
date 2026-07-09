@@ -280,6 +280,89 @@ class TestRunAgent:
         assert result.suggestions_made == 1
         assert result.comments_made == 1
 
+    def test_skips_duplicate_inline_comment_on_same_matched_text_across_rounds(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        brand_guidelines: BrandGuidelines,
+    ) -> None:
+        """A repeat create_inline_comment on the same span in a later round is
+        skipped rather than posted again -- the model re-flagging the same
+        structural issue during both its overall-structure pass and its
+        paragraph-by-paragraph pass shouldn't duplicate the comment."""
+        first_call = ToolCall(
+            id="call_1",
+            name="create_inline_comment",
+            arguments={"matched_text": "Big News!", "comment": "Reorder this."},
+        )
+        second_call = ToolCall(
+            id="call_2",
+            name="create_inline_comment",
+            arguments={
+                "matched_text": "Big News!",
+                "comment": "Lead with value instead.",
+            },
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(first_call),
+            _tool_call_result(second_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = run_agent(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            brief_id="brief-id",
+            brand_guidelines=brand_guidelines,
+        )
+
+        docs_client.create_inline_comment.assert_called_once_with(
+            document_id="doc-id",
+            matched_text="Big News!",
+            comment="Reorder this.",
+        )
+        assert result.comments_made == 1
+
+    def test_skips_duplicate_suggestion_on_same_matched_text_across_rounds(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        brand_guidelines: BrandGuidelines,
+    ) -> None:
+        """A repeat create_suggestion on the same span in a later round is
+        skipped rather than posted again."""
+        first_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            arguments={"matched_text": "Feature", "replacement_text": "Capability"},
+        )
+        second_call = ToolCall(
+            id="call_2",
+            name="create_suggestion",
+            arguments={"matched_text": "Feature", "replacement_text": "Tool"},
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(first_call),
+            _tool_call_result(second_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = run_agent(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            brief_id="brief-id",
+            brand_guidelines=brand_guidelines,
+        )
+
+        docs_client.create_suggestion.assert_called_once_with(
+            document_id="doc-id",
+            matched_text="Feature",
+            replacement_text="Capability",
+        )
+        assert result.suggestions_made == 1
+
     def test_docs_client_error_is_fed_back_as_a_tool_result_not_raised(
         self,
         docs_client: MagicMock,
@@ -346,12 +429,22 @@ class TestRunAgent:
         brand_guidelines: BrandGuidelines,
     ) -> None:
         """A non-terminating conversation is capped by max_tool_call_rounds."""
-        never_ending_call = ToolCall(
-            id="call_1",
-            name="create_suggestion",
-            arguments={"matched_text": "Feature", "replacement_text": "Capability"},
-        )
-        llm_client.complete_chat.return_value = _tool_call_result(never_ending_call)
+        # Distinct matched_text per round -- a repeated identical tool call
+        # would be collapsed by duplicate-span skipping, confounding this
+        # test's assertion that the round cap itself is what stops the loop.
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(
+                ToolCall(
+                    id=f"call_{i}",
+                    name="create_suggestion",
+                    arguments={
+                        "matched_text": f"Feature {i}",
+                        "replacement_text": f"Capability {i}",
+                    },
+                )
+            )
+            for i in range(3)
+        ]
 
         result = run_agent(
             docs_client=docs_client,
