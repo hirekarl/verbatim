@@ -140,7 +140,10 @@ class TestRunAgent:
             guidelines_path=str(brand_guidelines.filepath)
         )
         mock_instance.evaluate.assert_called_once_with(
-            _DOCUMENT.body_text, channel="email"
+            _DOCUMENT.body_text,
+            channel="email",
+            headings=_DOCUMENT.headings,
+            title=_DOCUMENT.title,
         )
         mock_build.assert_called_once_with(
             brand_guidelines.format_for_llm_prompt(target_channel="email"),

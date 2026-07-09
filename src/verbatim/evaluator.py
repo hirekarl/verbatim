@@ -1,10 +1,15 @@
 """Brand guidelines evaluator that checks text against brand rules."""
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from verbatim.brand_guidelines import BrandGuidelines
+
+if TYPE_CHECKING:
+    from verbatim.docs_client import Heading
 
 
 @dataclass
@@ -30,13 +35,22 @@ class BrandGuidelinesEvaluator:
         """
         self.guidelines = BrandGuidelines(guidelines_path)
 
-    def evaluate(self, text: str, channel: str | None = None) -> list[Violation]:
+    def evaluate(
+        self,
+        text: str,
+        channel: str | None = None,
+        headings: list[Heading] | None = None,
+        title: str | None = None,
+    ) -> list[Violation]:
         """Evaluate text against all brand guidelines.
 
         Args:
             text: The text to evaluate
             channel: Optional target channel (e.g., "twitter", "facebook",
                     "instagram", "email") for channel-specific constraints
+            headings: Optional list of document headings to check for
+                sentence case compliance
+            title: Optional document title to check for Title Case compliance
 
         Returns:
             List of violations found in the text
@@ -59,6 +73,12 @@ class BrandGuidelinesEvaluator:
         violations.extend(self._check_mailchimp_capitalization(text))
         violations.extend(self._check_number_formatting(text))
         violations.extend(self._check_race_heritage_capitalization(text))
+
+        # Check heading/title case rules
+        if headings:
+            violations.extend(self._check_heading_sentence_case(headings))
+        if title:
+            violations.extend(self._check_title_case(title))
 
         # Check channel-specific constraints if channel is specified
         if channel:
@@ -875,6 +895,245 @@ class BrandGuidelinesEvaluator:
             )
 
         return violations
+
+    def _check_heading_sentence_case(self, headings: list[Heading]) -> list[Violation]:
+        """Check that headings use sentence case, not Title Case.
+
+        Brand guidelines require sentence case for headings and subheadings
+        (only the first word capitalized, plus proper nouns/acronyms).
+
+        Args:
+            headings: List of Heading objects to check
+
+        Returns:
+            List of violations for headings that appear to use Title Case
+        """
+        violations: list[Violation] = []
+
+        # Words that are allowed to be capitalized (acronyms, brand names)
+        allowed_caps = {
+            "API",
+            "APIs",
+            "HTML",
+            "CSS",
+            "URL",
+            "URLs",
+            "HTTP",
+            "HTTPS",
+            "JSON",
+            "XML",
+            "RSS",
+            "SEO",
+            "CTA",
+            "CTAs",
+            "FAQ",
+            "FAQs",
+            "PDF",
+            "GIF",
+            "ROI",
+            "KPI",
+            "KPIs",
+            "SMS",
+            "CRM",
+            "B2B",
+            "B2C",
+            "SaaS",
+            "AWS",
+            "AI",
+            "ML",
+            "Mailchimp",
+            "Google",
+            "Facebook",
+            "Instagram",
+            "Twitter",
+            "LinkedIn",
+            "YouTube",
+            "iOS",
+            "macOS",
+            "WordPress",
+        }
+
+        for heading in headings:
+            text = heading.text.strip()
+            words = text.split()
+
+            if len(words) <= 1:
+                continue
+
+            capitalized_after_first = []
+            for word in words[1:]:
+                clean_word = re.sub(r"[^\w]", "", word)
+                if not clean_word:
+                    continue
+
+                if clean_word in allowed_caps:
+                    continue
+
+                if clean_word.isupper() and len(clean_word) >= 2:
+                    continue
+
+                if clean_word[0].isupper() and not clean_word.isupper():
+                    capitalized_after_first.append(word)
+
+            if len(capitalized_after_first) >= 2:
+                violations.append(
+                    Violation(
+                        category="formatting_and_style",
+                        severity="warning",
+                        message=(
+                            "Headings should use sentence case, not Title Case. "
+                            "Only capitalize the first word and proper nouns."
+                        ),
+                        matched_text=text,
+                        suggestion=self._to_sentence_case(text, allowed_caps),
+                    )
+                )
+
+        return violations
+
+    def _to_sentence_case(self, text: str, allowed_caps: set[str]) -> str:
+        """Convert text to sentence case, preserving allowed capitalizations.
+
+        Args:
+            text: The text to convert
+            allowed_caps: Set of words that should remain capitalized
+
+        Returns:
+            Text converted to sentence case
+        """
+        words = text.split()
+        if not words:
+            return text
+
+        result = [words[0]]
+        for word in words[1:]:
+            clean_word = re.sub(r"[^\w]", "", word)
+            if clean_word in allowed_caps or (
+                clean_word.isupper() and len(clean_word) >= 2
+            ):
+                result.append(word)
+            else:
+                result.append(word.lower())
+
+        return " ".join(result)
+
+    def _check_title_case(self, title: str) -> list[Violation]:
+        """Check that document titles use Title Case.
+
+        Brand guidelines require Title Case for page and blog post titles
+        (capitalize significant words, lowercase articles/prepositions
+        unless they're the first word).
+
+        Args:
+            title: The document title to check
+
+        Returns:
+            List of violations if the title doesn't use proper Title Case
+        """
+        violations: list[Violation] = []
+
+        title = title.strip()
+        if not title:
+            return violations
+
+        words = title.split()
+        if not words:
+            return violations
+
+        # Only articles, prepositions, and coordinating conjunctions stay lowercase
+        # in Title Case. Verbs (is) and pronouns (it) must be capitalized.
+        minor_words = {
+            "a",
+            "an",
+            "the",
+            "and",
+            "but",
+            "or",
+            "nor",
+            "for",
+            "yet",
+            "so",
+            "at",
+            "by",
+            "if",
+            "in",
+            "of",
+            "on",
+            "to",
+            "up",
+            "as",
+            "vs",
+            "via",
+            "with",
+            "from",
+            "into",
+            "onto",
+            "upon",
+            "over",
+        }
+
+        issues_found = False
+
+        if words[0][0].islower():
+            issues_found = True
+
+        for word in words[1:]:
+            clean_word = re.sub(r"[^\w]", "", word)
+            if not clean_word:
+                continue
+
+            if clean_word.lower() in minor_words:
+                continue
+
+            if clean_word.isupper() and len(clean_word) >= 2:
+                continue
+
+            if clean_word[0].islower():
+                issues_found = True
+                break
+
+        if issues_found:
+            violations.append(
+                Violation(
+                    category="formatting_and_style",
+                    severity="warning",
+                    message=(
+                        "Document titles should use Title Case. "
+                        "Capitalize significant words."
+                    ),
+                    matched_text=title,
+                    suggestion=self._to_title_case(title, minor_words),
+                )
+            )
+
+        return violations
+
+    def _to_title_case(self, text: str, minor_words: set[str]) -> str:
+        """Convert text to Title Case.
+
+        Args:
+            text: The text to convert
+            minor_words: Set of words that should remain lowercase
+                (unless they're the first word)
+
+        Returns:
+            Text converted to Title Case
+        """
+        words = text.split()
+        if not words:
+            return text
+
+        result = [words[0].capitalize()]
+        for word in words[1:]:
+            clean_word = re.sub(r"[^\w]", "", word)
+            if clean_word.lower() in minor_words:
+                result.append(word.lower())
+            elif clean_word.isupper() and len(clean_word) >= 2:
+                result.append(word)
+            else:
+                result.append(word.capitalize())
+
+        return " ".join(result)
 
     def _check_channel_constraints(self, text: str, channel: str) -> list[Violation]:
         """Check for channel-specific constraint violations.

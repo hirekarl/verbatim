@@ -2,6 +2,7 @@
 
 import pytest
 
+from verbatim.docs_client import Heading
 from verbatim.evaluator import BrandGuidelinesEvaluator
 
 
@@ -1152,3 +1153,220 @@ class TestBrandGuidelinesEvaluator:
                 and ("black" in v.message.lower() or "white" in v.message.lower())
             ]
             assert len(race_violations) > 0, f"Should flag singular race term: {text}"
+
+    # -------------------------------------------------------------------------
+    # Heading sentence case checks
+    # -------------------------------------------------------------------------
+
+    def test_heading_title_case_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that Title Case headings are flagged (should be sentence case)."""
+        headings = [
+            Heading(level=2, text="Getting Started With Email Marketing"),
+            Heading(level=3, text="How To Build Your First Campaign"),
+        ]
+
+        violations = evaluator.evaluate("Body text.", headings=headings)
+        heading_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style"
+            and "sentence case" in v.message.lower()
+        ]
+        assert len(heading_violations) == 2
+
+    def test_heading_sentence_case_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that sentence case headings produce no violations."""
+        headings = [
+            Heading(level=2, text="Getting started with email marketing"),
+            Heading(level=3, text="How to build your first campaign"),
+        ]
+
+        violations = evaluator.evaluate("Body text.", headings=headings)
+        heading_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style"
+            and "sentence case" in v.message.lower()
+        ]
+        assert len(heading_violations) == 0
+
+    def test_heading_allows_acronyms(self, evaluator: BrandGuidelinesEvaluator) -> None:
+        """Test that acronyms in headings are not flagged as Title Case."""
+        headings = [
+            Heading(level=2, text="Setting up your API integration"),
+            Heading(level=3, text="Working with HTML templates"),
+            Heading(level=2, text="Connect to AWS services"),
+        ]
+
+        violations = evaluator.evaluate("Body text.", headings=headings)
+        heading_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style"
+            and "sentence case" in v.message.lower()
+        ]
+        assert len(heading_violations) == 0
+
+    def test_heading_allows_proper_nouns_mailchimp(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that Mailchimp in headings is not flagged."""
+        headings = [
+            Heading(level=2, text="Getting started with Mailchimp"),
+        ]
+
+        violations = evaluator.evaluate("Body text.", headings=headings)
+        heading_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style"
+            and "sentence case" in v.message.lower()
+        ]
+        assert len(heading_violations) == 0
+
+    def test_heading_single_word_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that single-word headings don't produce violations."""
+        headings = [
+            Heading(level=2, text="Overview"),
+            Heading(level=3, text="FAQ"),
+        ]
+
+        violations = evaluator.evaluate("Body text.", headings=headings)
+        heading_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style"
+            and "sentence case" in v.message.lower()
+        ]
+        assert len(heading_violations) == 0
+
+    # -------------------------------------------------------------------------
+    # Document title Title Case checks
+    # -------------------------------------------------------------------------
+
+    def test_title_lowercase_words_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that lowercase significant words in titles are flagged."""
+        violations = evaluator.evaluate(
+            "Body text.", title="getting started with email marketing"
+        )
+        title_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style"
+            and "title case" in v.message.lower()
+        ]
+        assert len(title_violations) == 1
+
+    def test_title_proper_title_case_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that proper Title Case titles produce no violations."""
+        test_cases = [
+            "Getting Started with Email Marketing",
+            "How to Build Your First Campaign",
+            "A Guide to Better Email",
+        ]
+
+        for title in test_cases:
+            violations = evaluator.evaluate("Body text.", title=title)
+            title_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "title case" in v.message.lower()
+            ]
+            assert len(title_violations) == 0, f"Should not flag: {title}"
+
+    def test_title_allows_lowercase_articles_prepositions(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that lowercase articles/prepositions in titles are allowed."""
+        test_cases = [
+            "The Art of Email Marketing",
+            "A Guide to Better Campaigns",
+            "Marketing in the Digital Age",
+            "Tips and Tricks for Success",
+        ]
+
+        for title in test_cases:
+            violations = evaluator.evaluate("Body text.", title=title)
+            title_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "title case" in v.message.lower()
+            ]
+            assert len(title_violations) == 0, f"Should not flag: {title}"
+
+    def test_title_first_word_must_be_capitalized(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that titles starting with lowercase are flagged."""
+        violations = evaluator.evaluate("Body text.", title="the quick guide")
+        title_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style"
+            and "title case" in v.message.lower()
+        ]
+        assert len(title_violations) == 1
+
+    def test_title_single_word_capitalized_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that single-word capitalized titles don't produce violations."""
+        violations = evaluator.evaluate("Body text.", title="Overview")
+        title_violations = [
+            v
+            for v in violations
+            if v.category == "formatting_and_style"
+            and "title case" in v.message.lower()
+        ]
+        assert len(title_violations) == 0
+
+    def test_title_verbs_and_pronouns_must_be_capitalized(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that verbs (is) and pronouns (it) must be capitalized in titles."""
+        test_cases = [
+            "Marketing is the Answer",  # "is" should be "Is"
+            "Why it Works for You",  # "it" should be "It"
+        ]
+
+        for title in test_cases:
+            violations = evaluator.evaluate("Body text.", title=title)
+            title_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "title case" in v.message.lower()
+            ]
+            assert len(title_violations) == 1, f"Should flag: {title}"
+
+    def test_title_verbs_and_pronouns_capitalized_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that properly capitalized verbs/pronouns don't produce violations."""
+        test_cases = [
+            "Marketing Is the Answer",
+            "Why It Works for You",
+            "What It Means to Succeed",
+        ]
+
+        for title in test_cases:
+            violations = evaluator.evaluate("Body text.", title=title)
+            title_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "title case" in v.message.lower()
+            ]
+            assert len(title_violations) == 0, f"Should not flag: {title}"

@@ -110,7 +110,12 @@ def run_agent(
         evaluator = BrandGuidelinesEvaluator(
             guidelines_path=str(brand_guidelines.filepath)
         )
-        violations = evaluator.evaluate(document.body_text, channel=target_channel)
+        violations = evaluator.evaluate(
+            document.body_text,
+            channel=target_channel,
+            headings=document.headings,
+            title=document.title,
+        )
 
     system_prompt = build_system_prompt(
         guidelines_block, document, campaign, violations=violations
