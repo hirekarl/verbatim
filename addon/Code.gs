@@ -13,7 +13,6 @@ function onHomepage(e) {
 }
 
 function buildAuditCard(e) {
-  const documentId = extractDocId(e && e.docs && e.docs.id);
   const defaultBriefId =
     PropertiesService.getScriptProperties().getProperty('DEFAULT_BRIEF_ID') ||
     '';
@@ -40,9 +39,7 @@ function buildAuditCard(e) {
   const button = CardService.newTextButton()
     .setText('Run Verbatim Audit')
     .setOnClickAction(
-      CardService.newAction()
-        .setFunctionName('runAudit')
-        .setParameters({ documentId: documentId })
+      CardService.newAction().setFunctionName('runAudit')
     );
 
   const section = CardService.newCardSection()
@@ -57,7 +54,11 @@ function buildAuditCard(e) {
 }
 
 function runAudit(e) {
-  const documentId = e.parameters.documentId;
+  // e.docs.id (the event object's doc-context field) was not reliably
+  // populated in testing, even at click time -- DocumentApp.getActiveDocument()
+  // reads the current doc directly from the active editor session instead
+  // of depending on that event object field.
+  const documentId = DocumentApp.getActiveDocument().getId();
   const briefId = extractDocId(e.formInput.briefId);
   const channel = e.formInput.channel;
 
