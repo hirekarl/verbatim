@@ -220,7 +220,7 @@ uv run verbatim 1_abc123xyz 1_brief456abc --channel email
 
 ### HTTP usage
 
-For a hosted deployment (the eventual Workspace Add-on backend — see `docs/workspace-addon-migration.md`), the same audit logic is also exposed over HTTP. This is additive, not a replacement: `cli.py`/`uv run verbatim` above remains the local-dev/direct-run entrypoint.
+The same audit logic is also exposed over HTTP, as the backend for the Workspace Add-on (see `docs/workspace-addon-migration.md`) — deployed and functionally complete as a Cloud Run service (`verbatim-backend`), with the Add-on itself pushed to a real Apps Script project; only a final manual browser end-to-end test is still outstanding. This is additive, not a replacement: `cli.py`/`uv run verbatim` above remains the local-dev/direct-run entrypoint.
 
 ```sh
 uv run verbatim-server
@@ -247,8 +247,12 @@ Unlike the CLI (which authenticates via a local OAuth consent flow, caching a to
 verbatim/
 ├── .github/
 │   ├── CODEOWNERS
+│   ├── dependabot.yml
+│   ├── ISSUE_TEMPLATE/
+│   ├── pull_request_template.md
 │   └── workflows/
-│       └── ci.yml          # lint, type-check, and test on every PR and push to main
+│       ├── ci.yml          # lint, type-check, and test on every PR and push to main
+│       └── release.yml     # semver bump + changelog + tag + GitHub Release on merge to main
 ├── src/verbatim/           # the installable package
 │   ├── __init__.py
 │   ├── __main__.py         # runnable module entrypoint
@@ -275,7 +279,8 @@ verbatim/
 ├── addon/                  # Editor Add-on source (Apps Script) -- see addon/README.md
 │   ├── appsscript.json     # manifest: runtime, oauthScopes, Docs Editor Add-on config
 │   ├── Code.gs             # homepage trigger + CardService sidebar UI
-│   └── Backend.gs          # UrlFetchApp call to the Python backend
+│   ├── Backend.gs          # UrlFetchApp call to the Python backend
+│   └── icon.png            # sidebar icon
 ├── .knowledge-base/        # decomposed reference docs for external APIs (map-and-leaf)
 
 ├── docs/                   # PRD and research reference docs (.docx + Markdown snapshots)
@@ -291,7 +296,7 @@ verbatim/
 
 ### Versioning
 
-Versioning will become fully automatic (semver bump + changelog + GitHub Release on every merge to `main`) once this repo's CI/CD is set up — see `BOOTSTRAPPING.md` for that plan. Until then, there's no manual version bump step to worry about.
+Versioning is fully automatic: `.github/workflows/release.yml` runs `commitizen` on every merge to `main`, bumping the semver version (from Conventional Commits history), regenerating `CHANGELOG.md`, tagging the commit, and cutting a GitHub Release. There's no manual version bump step — see `BOOTSTRAPPING.md` for the rationale.
 
 ### License
 
