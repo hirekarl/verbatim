@@ -1331,3 +1331,42 @@ class TestBrandGuidelinesEvaluator:
             and "title case" in v.message.lower()
         ]
         assert len(title_violations) == 0
+
+    def test_title_verbs_and_pronouns_must_be_capitalized(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that verbs (is) and pronouns (it) must be capitalized in titles."""
+        test_cases = [
+            "Marketing is the Answer",  # "is" should be "Is"
+            "Why it Works for You",  # "it" should be "It"
+        ]
+
+        for title in test_cases:
+            violations = evaluator.evaluate("Body text.", title=title)
+            title_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "title case" in v.message.lower()
+            ]
+            assert len(title_violations) == 1, f"Should flag: {title}"
+
+    def test_title_verbs_and_pronouns_capitalized_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that properly capitalized verbs/pronouns don't produce violations."""
+        test_cases = [
+            "Marketing Is the Answer",
+            "Why It Works for You",
+            "What It Means to Succeed",
+        ]
+
+        for title in test_cases:
+            violations = evaluator.evaluate("Body text.", title=title)
+            title_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style"
+                and "title case" in v.message.lower()
+            ]
+            assert len(title_violations) == 0, f"Should not flag: {title}"

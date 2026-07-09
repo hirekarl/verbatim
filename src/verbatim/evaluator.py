@@ -1040,6 +1040,8 @@ class BrandGuidelinesEvaluator:
         if not words:
             return violations
 
+        # Only articles, prepositions, and coordinating conjunctions stay lowercase
+        # in Title Case. Verbs (is) and pronouns (it) must be capitalized.
         minor_words = {
             "a",
             "an",
@@ -1053,15 +1055,13 @@ class BrandGuidelinesEvaluator:
             "so",
             "at",
             "by",
+            "if",
             "in",
             "of",
             "on",
             "to",
             "up",
             "as",
-            "is",
-            "if",
-            "it",
             "vs",
             "via",
             "with",
