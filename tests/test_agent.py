@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 from pytest_mock import MockerFixture
 
-from verbatim.agent import AgentRunResult, run_agent
+from verbatim.agent import AgentRunResult, Finding, run_agent
 from verbatim.brand_guidelines import BrandGuidelines
 from verbatim.docs_client import (
     CampaignContext,
@@ -165,6 +165,7 @@ class TestRunAgent:
             arguments={
                 "matched_text": "Feature",
                 "replacement_text": "Capability",
+                "rationale": "Simplify the noun.",
                 "category": "readability",
             },
         )
@@ -189,6 +190,14 @@ class TestRunAgent:
         assert result.suggestions_made == 1
         assert result.comments_made == 0
         assert result.category_counts == {"readability": 1}
+        assert result.findings == [
+            Finding(
+                category="readability",
+                kind="suggestion",
+                matched_text="Feature",
+                detail="Simplify the noun.",
+            )
+        ]
 
     def test_skips_redundant_suggestion_when_matched_and_replacement_are_identical(
         self,
@@ -218,6 +227,7 @@ class TestRunAgent:
         docs_client.create_suggestion.assert_not_called()
         assert result.suggestions_made == 0
         assert result.comments_made == 0
+        assert result.findings == []
 
     def test_dispatches_a_single_create_inline_comment_call_then_stops(
         self,
@@ -256,6 +266,14 @@ class TestRunAgent:
         assert result.suggestions_made == 0
         assert result.comments_made == 1
         assert result.category_counts == {"information_hierarchy": 1}
+        assert result.findings == [
+            Finding(
+                category="information_hierarchy",
+                kind="comment",
+                matched_text="Big News!",
+                detail="Lead with value instead.",
+            )
+        ]
 
     def test_dispatches_multiple_tool_calls_returned_in_one_round(
         self,
@@ -270,6 +288,7 @@ class TestRunAgent:
             arguments={
                 "matched_text": "Feature",
                 "replacement_text": "Capability",
+                "rationale": "Simplify the noun.",
                 "category": "readability",
             },
         )
@@ -301,6 +320,20 @@ class TestRunAgent:
             "readability": 1,
             "information_hierarchy": 1,
         }
+        assert result.findings == [
+            Finding(
+                category="readability",
+                kind="suggestion",
+                matched_text="Feature",
+                detail="Simplify the noun.",
+            ),
+            Finding(
+                category="information_hierarchy",
+                kind="comment",
+                matched_text="Big News!",
+                detail="Reorder this.",
+            ),
+        ]
 
     def test_missing_category_falls_back_to_uncategorized(
         self,
@@ -334,6 +367,55 @@ class TestRunAgent:
 
         assert result.suggestions_made == 1
         assert result.category_counts == {"uncategorized": 1}
+        assert result.findings == [
+            Finding(
+                category="uncategorized",
+                kind="suggestion",
+                matched_text="Feature",
+                detail="",
+            )
+        ]
+
+    def test_missing_rationale_falls_back_to_empty_detail(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        brand_guidelines: BrandGuidelines,
+    ) -> None:
+        """A suggestion tool call omitting rationale still creates a Finding.
+
+        Same reasoning as the missing-category fallback above: the model
+        isn't guaranteed to honor the schema's `required` list."""
+        suggestion_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            arguments={
+                "matched_text": "Feature",
+                "replacement_text": "Capability",
+                "category": "readability",
+            },
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(suggestion_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = run_agent(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            brief_id="brief-id",
+            brand_guidelines=brand_guidelines,
+        )
+
+        assert result.findings == [
+            Finding(
+                category="readability",
+                kind="suggestion",
+                matched_text="Feature",
+                detail="",
+            )
+        ]
 
     def test_skips_duplicate_inline_comment_on_same_matched_text_across_rounds(
         self,
@@ -378,6 +460,7 @@ class TestRunAgent:
             comment="Reorder this.",
         )
         assert result.comments_made == 1
+        assert len(result.findings) == 1
 
     def test_skips_duplicate_suggestion_on_same_matched_text_across_rounds(
         self,
@@ -417,6 +500,7 @@ class TestRunAgent:
             replacement_text="Capability",
         )
         assert result.suggestions_made == 1
+        assert len(result.findings) == 1
 
     def test_docs_client_error_is_fed_back_as_a_tool_result_not_raised(
         self,
@@ -450,6 +534,7 @@ class TestRunAgent:
 
         assert result.suggestions_made == 0
         assert result.category_counts == {}
+        assert result.findings == []
         second_call_messages = llm_client.complete_chat.call_args_list[1].kwargs[
             "messages"
         ]

@@ -108,6 +108,15 @@ class AuditRequest(BaseModel):
     model: str = DEFAULT_MODEL
 
 
+class FindingResponse(BaseModel):
+    """One issue the agent actually posted to the document."""
+
+    category: str
+    kind: Literal["suggestion", "comment"]
+    matched_text: str
+    detail: str
+
+
 class AuditResponse(BaseModel):
     """Response body for a completed audit run."""
 
@@ -115,6 +124,7 @@ class AuditResponse(BaseModel):
     comments_made: int
     stopped_due_to_max_rounds: bool
     category_counts: dict[str, int]
+    findings: list[FindingResponse] = []
 
 
 class AuditJobSubmitResponse(BaseModel):
@@ -231,6 +241,15 @@ def _run_audit_job(
                 comments_made=result.comments_made,
                 stopped_due_to_max_rounds=result.stopped_due_to_max_rounds,
                 category_counts=result.category_counts,
+                findings=[
+                    FindingResponse(
+                        category=finding.category,
+                        kind=finding.kind,
+                        matched_text=finding.matched_text,
+                        detail=finding.detail,
+                    )
+                    for finding in result.findings
+                ],
             ),
         )
 

@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pytest_mock import MockerFixture
 
-from verbatim.agent import AgentRunResult
+from verbatim.agent import AgentRunResult, Finding
 from verbatim.docs_client import AuthenticationError, DocsClientError
 from verbatim.http_api import BACKEND_SECRET_HEADER, app, create_app
 from verbatim.llm_client import LLMClientError
@@ -89,6 +89,20 @@ class TestAuditEndpoint:
             transcript=[],
             stopped_due_to_max_rounds=False,
             category_counts={"tone_drift": 2, "cta_cadence": 1},
+            findings=[
+                Finding(
+                    category="tone_drift",
+                    kind="suggestion",
+                    matched_text="skyrocket your revenue",
+                    detail="Too hype for the brand voice.",
+                ),
+                Finding(
+                    category="cta_cadence",
+                    kind="comment",
+                    matched_text="Buy now!",
+                    detail="CTA appears before any value proposition.",
+                ),
+            ],
         )
 
         response = client.post(
@@ -113,6 +127,20 @@ class TestAuditEndpoint:
             "comments_made": 5,
             "stopped_due_to_max_rounds": False,
             "category_counts": {"tone_drift": 2, "cta_cadence": 1},
+            "findings": [
+                {
+                    "category": "tone_drift",
+                    "kind": "suggestion",
+                    "matched_text": "skyrocket your revenue",
+                    "detail": "Too hype for the brand voice.",
+                },
+                {
+                    "category": "cta_cadence",
+                    "kind": "comment",
+                    "matched_text": "Buy now!",
+                    "detail": "CTA appears before any value proposition.",
+                },
+            ],
         }
         mock_docs_client.assert_called_once_with("fake-token", include_drive=True)
         mock_llm_client.assert_called_once_with(model="custom/model")
@@ -154,6 +182,7 @@ class TestAuditEndpoint:
         final = _poll_until_terminal(client, job_id)
         assert final["status"] == "done"
         assert final["result"]["category_counts"] == {}
+        assert final["result"]["findings"] == []
         mock_llm_client.assert_called_once_with(model="google/gemini-2.5-flash")
         mock_run_agent.assert_called_once_with(
             docs_client=mock_docs_client.return_value,

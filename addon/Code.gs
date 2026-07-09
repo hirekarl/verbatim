@@ -181,6 +181,18 @@ var DISCLAIMER_TEXT =
   'contain errors or omissions. Human review and approval is required ' +
   'prior to publication.';
 
+// Widget text has practical length limits in the sidebar's fixed-width
+// card -- truncate long matched spans/details to keep each finding
+// scannable rather than wrapping into a wall of text.
+function _truncate(text, maxLength) {
+  if (!text) {
+    return text;
+  }
+  return text.length > maxLength
+    ? text.slice(0, maxLength - 1) + '…'
+    : text;
+}
+
 function buildResultCard(result) {
   const summary =
     'Suggestions posted: ' +
@@ -210,6 +222,29 @@ function buildResultCard(result) {
         CardService.newDecoratedText()
           .setTopLabel(CATEGORY_LABELS[key])
           .setText(String(counts[key]))
+      );
+    });
+  }
+
+  const findings = result.findings || [];
+  if (findings.length > 0) {
+    section.addWidget(
+      CardService.newTextParagraph().setText('Findings:')
+    );
+    // Grouped in the order categories first appear in `findings`, which is
+    // dispatch order from the agent loop -- not re-sorted by CATEGORY_ORDER,
+    // so this reads as "what the agent found, in the order it found it."
+    findings.forEach(function (finding) {
+      const label =
+        (CATEGORY_LABELS[finding.category] || finding.category) +
+        ' — ' +
+        (finding.kind === 'suggestion' ? 'Suggestion' : 'Comment');
+      section.addWidget(
+        CardService.newDecoratedText()
+          .setTopLabel(label)
+          .setText(_truncate(finding.matched_text, 80))
+          .setBottomLabel(_truncate(finding.detail, 100))
+          .setWrapText(true)
       );
     });
   }

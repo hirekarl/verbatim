@@ -4,10 +4,11 @@ import argparse
 import sys
 from pathlib import Path
 
-from verbatim.agent import run_agent
+from verbatim.agent import Finding, run_agent
 from verbatim.brand_guidelines import BrandGuidelines
 from verbatim.docs_client import WRITE_SCOPES, DocsClientError, GoogleDocsClient
 from verbatim.llm_client import LLMClientError, OpenRouterClient
+from verbatim.prompt import CATEGORY_LABELS
 
 
 def main(args: list[str] | None = None) -> None:
@@ -99,6 +100,20 @@ def main(args: list[str] | None = None) -> None:
         )
         print(f"Max rounds cap hit: {cap_hit_str}")
         print("=" * 50)
+
+        if result.findings:
+            print("\nFindings:")
+            by_category: dict[str, list[Finding]] = {}
+            for finding in result.findings:
+                by_category.setdefault(finding.category, []).append(finding)
+            for category, category_findings in by_category.items():
+                print(f"\n{CATEGORY_LABELS.get(category, category)}:")
+                for finding in category_findings:
+                    kind_label = (
+                        "Suggestion" if finding.kind == "suggestion" else "Comment"
+                    )
+                    detail = f" -- {finding.detail}" if finding.detail else ""
+                    print(f'  [{kind_label}] "{finding.matched_text}"{detail}')
 
     except (
         DocsClientError,
