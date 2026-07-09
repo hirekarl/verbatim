@@ -107,7 +107,9 @@ class OpenRouterClient:
                 max_tokens=max_tokens,
             )
         except OpenAIError as err:
-            raise LLMClientError("OpenRouter chat completion request failed") from err
+            raise LLMClientError(
+                f"OpenRouter chat completion request failed: {err}"
+            ) from err
 
         message = response.choices[0].message
         tool_calls: list[ToolCall] = []
