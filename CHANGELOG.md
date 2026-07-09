@@ -1,3 +1,9 @@
+## v0.11.0 (2026-07-09)
+
+### Feat
+
+- **addon**: richer copy, category breakdown, and real icon (#42)
+
 ## v0.10.1 (2026-07-09)
 
 ### Fix
