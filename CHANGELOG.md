@@ -1,3 +1,9 @@
+## v0.10.0 (2026-07-09)
+
+### Feat
+
+- **evaluator**: add title/sentence case checks for headings and document titles (#40)
+
 ## v0.9.0 (2026-07-08)
 
 ### Feat
