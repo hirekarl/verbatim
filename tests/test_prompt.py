@@ -2,7 +2,12 @@
 
 from verbatim.docs_client import CampaignContext, DocumentContent
 from verbatim.evaluator import Violation
-from verbatim.prompt import SYSTEM_PROMPT_TEMPLATE, TOOL_SCHEMAS, build_system_prompt
+from verbatim.prompt import (
+    CATEGORIES,
+    SYSTEM_PROMPT_TEMPLATE,
+    TOOL_SCHEMAS,
+    build_system_prompt,
+)
 
 
 class TestBuildSystemPrompt:
@@ -209,3 +214,29 @@ class TestToolSchemas:
     def test_all_schemas_are_type_function(self) -> None:
         """Every schema uses the OpenAI function-calling tool type."""
         assert all(schema["type"] == "function" for schema in TOOL_SCHEMAS)
+
+    def test_create_suggestion_requires_category_from_the_seven_categories(
+        self,
+    ) -> None:
+        """create_suggestion's schema requires a category enum field."""
+        schema = next(
+            s for s in TOOL_SCHEMAS if s["function"]["name"] == "create_suggestion"
+        )
+        properties = schema["function"]["parameters"]["properties"]
+        required = schema["function"]["parameters"]["required"]
+
+        assert "category" in required
+        assert properties["category"]["enum"] == CATEGORIES
+
+    def test_create_inline_comment_requires_category_from_the_seven_categories(
+        self,
+    ) -> None:
+        """create_inline_comment's schema requires a category enum field."""
+        schema = next(
+            s for s in TOOL_SCHEMAS if s["function"]["name"] == "create_inline_comment"
+        )
+        properties = schema["function"]["parameters"]["properties"]
+        required = schema["function"]["parameters"]["required"]
+
+        assert "category" in required
+        assert properties["category"]["enum"] == CATEGORIES

@@ -5,6 +5,19 @@ from typing import Any
 from verbatim.docs_client import CampaignContext, DocumentContent
 from verbatim.evaluator import Violation
 
+# Matches brand_guidelines.json's `rules` keys exactly -- the same convention
+# evaluator.py's Violation.category already uses for its 3 deterministic
+# categories, extended here to all 7 so every tool call can be tagged.
+CATEGORIES: list[str] = [
+    "tone_drift",
+    "information_hierarchy",
+    "cta_cadence",
+    "readability",
+    "formatting_and_style",
+    "channel_constraints",
+    "banned_words_and_competitors",
+]
+
 SYSTEM_PROMPT_TEMPLATE = """You are Verbatim, an AI copywriting assistant built to \
 review drafts in Google Docs. Your task is to evaluate the document against the \
 Brand Guidelines and the Campaign Brief to identify mechanical, stylistic, and \
@@ -38,6 +51,8 @@ create_suggestion with the replacement text.
 - For structural issues (Paragraph Order, CTA Cadence, Information Hierarchy): \
 Call create_inline_comment with a constructive explanation of the issue and how \
 the writer can improve it.
+- Always set the category parameter on every tool call to the single one of \
+the 7 categories above that issue belongs to.
 
 Audit Workflow & Sequence:
 1. First, analyze the overall document structure (paragraph order, logical flow, \
@@ -94,8 +109,20 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                             "copywriter."
                         ),
                     },
+                    "category": {
+                        "type": "string",
+                        "enum": CATEGORIES,
+                        "description": (
+                            "Which of the 7 audit categories this issue belongs to."
+                        ),
+                    },
                 },
-                "required": ["matched_text", "replacement_text", "rationale"],
+                "required": [
+                    "matched_text",
+                    "replacement_text",
+                    "rationale",
+                    "category",
+                ],
             },
         },
     },
@@ -126,8 +153,15 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                             "what the issue is and how to improve it."
                         ),
                     },
+                    "category": {
+                        "type": "string",
+                        "enum": CATEGORIES,
+                        "description": (
+                            "Which of the 7 audit categories this issue belongs to."
+                        ),
+                    },
                 },
-                "required": ["matched_text", "comment"],
+                "required": ["matched_text", "comment", "category"],
             },
         },
     },
