@@ -106,12 +106,16 @@ def _fetch_document(service: Any, document_id: str) -> dict[str, Any]:
         return result
     except HttpError as err:
         if err.resp.status == 404:
-            raise DocumentNotFoundError(f"Document not found: {document_id}") from err
+            raise DocumentNotFoundError(
+                f"Document not found: {document_id} ({err})"
+            ) from err
         if err.resp.status == 403:
             raise DocumentAccessDeniedError(
-                f"Access denied for document: {document_id}"
+                f"Access denied for document: {document_id} ({err})"
             ) from err
-        raise DocsClientError(f"Failed to fetch document: {document_id}") from err
+        raise DocsClientError(
+            f"Failed to fetch document: {document_id} ({err})"
+        ) from err
 
 
 def _execute_batch_update(

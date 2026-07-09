@@ -125,6 +125,11 @@ def run_agent(
     suggestions_made = 0
     comments_made = 0
     stopped_due_to_max_rounds = True
+    # Tracks (tool_name, matched_text) pairs already dispatched, so the model
+    # re-flagging the same span in a later round (e.g. once during its
+    # overall-structure pass, again during its paragraph-by-paragraph pass)
+    # doesn't produce duplicate comments/suggestions on the same text.
+    seen_spans: set[tuple[str, str]] = set()
 
     for _round in range(max_tool_call_rounds):
         result = llm_client.complete_chat(messages=messages, tools=TOOL_SCHEMAS)
@@ -136,7 +141,7 @@ def run_agent(
 
         for tool_call in result.tool_calls:
             outcome, made_suggestion, made_comment = _dispatch_tool_call(
-                docs_client, document_id, tool_call
+                docs_client, document_id, tool_call, seen_spans
             )
             suggestions_made += made_suggestion
             comments_made += made_comment
@@ -157,7 +162,10 @@ def run_agent(
 
 
 def _dispatch_tool_call(
-    docs_client: GoogleDocsClient, document_id: str, tool_call: ToolCall
+    docs_client: GoogleDocsClient,
+    document_id: str,
+    tool_call: ToolCall,
+    seen_spans: set[tuple[str, str]],
 ) -> tuple[str, int, int]:
     """Dispatch one tool call to GoogleDocsClient, returning a tool-result message.
 
@@ -165,6 +173,10 @@ def _dispatch_tool_call(
         docs_client: The client to dispatch the write to.
         document_id: The document being audited.
         tool_call: The model's requested tool call.
+        seen_spans: (tool_name, matched_text) pairs already dispatched this
+            run; a repeat is skipped rather than posted again, since the
+            model re-visits the same span across its structure pass and its
+            paragraph-by-paragraph pass.
 
     Returns:
         A tuple of (result text for the model, suggestions made, comments made).
@@ -181,18 +193,27 @@ def _dispatch_tool_call(
                     0,
                     0,
                 )
+            span_key = (tool_call.name, matched)
+            if span_key in seen_spans:
+                return "Already flagged this text; skipping duplicate.", 0, 0
             docs_client.create_suggestion(
                 document_id=document_id,
                 matched_text=matched,
                 replacement_text=replacement,
             )
+            seen_spans.add(span_key)
             return "Suggestion created.", 1, 0
         if tool_call.name == "create_inline_comment":
+            matched = tool_call.arguments["matched_text"]
+            span_key = (tool_call.name, matched)
+            if span_key in seen_spans:
+                return "Already flagged this text; skipping duplicate.", 0, 0
             docs_client.create_inline_comment(
                 document_id=document_id,
-                matched_text=tool_call.arguments["matched_text"],
+                matched_text=matched,
                 comment=tool_call.arguments["comment"],
             )
+            seen_spans.add(span_key)
             return "Comment created.", 0, 1
         return f"Unknown tool: {tool_call.name}", 0, 0
     except DocsClientError as err:

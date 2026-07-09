@@ -9,8 +9,13 @@
 
 function callVerbatimBackend(documentId, briefId, channel) {
   const props = PropertiesService.getScriptProperties();
-  const backendUrl = props.getProperty('BACKEND_URL');
-  const backendSharedSecret = props.getProperty('BACKEND_SHARED_SECRET');
+  // Script property values are trimmed defensively -- a stray trailing
+  // newline/space from copy-pasting into the Script Properties dialog would
+  // otherwise silently break the shared-secret comparison or the URL.
+  const backendUrl = (props.getProperty('BACKEND_URL') || '').trim();
+  const backendSharedSecret = (
+    props.getProperty('BACKEND_SHARED_SECRET') || ''
+  ).trim();
 
   if (!backendUrl) {
     throw new Error('Script property BACKEND_URL is not set.');
@@ -46,11 +51,19 @@ function callVerbatimBackend(documentId, briefId, channel) {
   const body = JSON.parse(response.getContentText());
 
   if (statusCode >= 400) {
+    // FastAPI's 422 responses carry `detail` as a list of validation-error
+    // objects, not a string -- string concatenation on that silently
+    // stringifies to "[object Object]"; JSON.stringify it instead so the
+    // real validation failure is visible in the error card.
+    var detail = body && body.detail;
+    var message =
+      typeof detail === 'string'
+        ? detail
+        : detail
+          ? JSON.stringify(detail)
+          : 'unknown error';
     throw new Error(
-      'Verbatim backend error (' +
-        statusCode +
-        '): ' +
-        (body.detail || 'unknown error')
+      'Verbatim backend error (' + statusCode + '): ' + message
     );
   }
 
