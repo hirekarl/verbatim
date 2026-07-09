@@ -98,6 +98,7 @@ class AuditResponse(BaseModel):
     suggestions_made: int
     comments_made: int
     stopped_due_to_max_rounds: bool
+    category_counts: dict[str, int]
 
 
 def _status_for(err: Exception) -> int:
@@ -194,6 +195,7 @@ def audit(
         suggestions_made=result.suggestions_made,
         comments_made=result.comments_made,
         stopped_due_to_max_rounds=result.stopped_due_to_max_rounds,
+        category_counts=result.category_counts,
     )
 
 

@@ -162,7 +162,11 @@ class TestRunAgent:
         suggestion_call = ToolCall(
             id="call_1",
             name="create_suggestion",
-            arguments={"matched_text": "Feature", "replacement_text": "Capability"},
+            arguments={
+                "matched_text": "Feature",
+                "replacement_text": "Capability",
+                "category": "readability",
+            },
         )
         llm_client.complete_chat.side_effect = [
             _tool_call_result(suggestion_call),
@@ -184,6 +188,7 @@ class TestRunAgent:
         )
         assert result.suggestions_made == 1
         assert result.comments_made == 0
+        assert result.category_counts == {"readability": 1}
 
     def test_skips_redundant_suggestion_when_matched_and_replacement_are_identical(
         self,
@@ -227,6 +232,7 @@ class TestRunAgent:
             arguments={
                 "matched_text": "Big News!",
                 "comment": "Lead with value instead.",
+                "category": "information_hierarchy",
             },
         )
         llm_client.complete_chat.side_effect = [
@@ -249,6 +255,7 @@ class TestRunAgent:
         )
         assert result.suggestions_made == 0
         assert result.comments_made == 1
+        assert result.category_counts == {"information_hierarchy": 1}
 
     def test_dispatches_multiple_tool_calls_returned_in_one_round(
         self,
@@ -260,12 +267,20 @@ class TestRunAgent:
         suggestion_call = ToolCall(
             id="call_1",
             name="create_suggestion",
-            arguments={"matched_text": "Feature", "replacement_text": "Capability"},
+            arguments={
+                "matched_text": "Feature",
+                "replacement_text": "Capability",
+                "category": "readability",
+            },
         )
         comment_call = ToolCall(
             id="call_2",
             name="create_inline_comment",
-            arguments={"matched_text": "Big News!", "comment": "Reorder this."},
+            arguments={
+                "matched_text": "Big News!",
+                "comment": "Reorder this.",
+                "category": "information_hierarchy",
+            },
         )
         llm_client.complete_chat.side_effect = [
             _tool_call_result(suggestion_call, comment_call),
@@ -282,6 +297,43 @@ class TestRunAgent:
 
         assert result.suggestions_made == 1
         assert result.comments_made == 1
+        assert result.category_counts == {
+            "readability": 1,
+            "information_hierarchy": 1,
+        }
+
+    def test_missing_category_falls_back_to_uncategorized(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        brand_guidelines: BrandGuidelines,
+    ) -> None:
+        """A tool call omitting category still counts, under 'uncategorized'.
+
+        The model isn't guaranteed to honor the schema's `required` list --
+        OpenRouter/OpenAI-style function calling doesn't hard-enforce it --
+        so a dispatched call missing `category` shouldn't crash or vanish
+        from the tally."""
+        suggestion_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            arguments={"matched_text": "Feature", "replacement_text": "Capability"},
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(suggestion_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = run_agent(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            brief_id="brief-id",
+            brand_guidelines=brand_guidelines,
+        )
+
+        assert result.suggestions_made == 1
+        assert result.category_counts == {"uncategorized": 1}
 
     def test_skips_duplicate_inline_comment_on_same_matched_text_across_rounds(
         self,
@@ -376,7 +428,11 @@ class TestRunAgent:
         suggestion_call = ToolCall(
             id="call_1",
             name="create_suggestion",
-            arguments={"matched_text": "nowhere", "replacement_text": "x"},
+            arguments={
+                "matched_text": "nowhere",
+                "replacement_text": "x",
+                "category": "readability",
+            },
         )
         docs_client.create_suggestion.side_effect = TextNotFoundError("not found")
         llm_client.complete_chat.side_effect = [
@@ -393,6 +449,7 @@ class TestRunAgent:
         )
 
         assert result.suggestions_made == 0
+        assert result.category_counts == {}
         second_call_messages = llm_client.complete_chat.call_args_list[1].kwargs[
             "messages"
         ]

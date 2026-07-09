@@ -73,6 +73,7 @@ class TestAuditEndpoint:
             comments_made=5,
             transcript=[],
             stopped_due_to_max_rounds=False,
+            category_counts={"tone_drift": 2, "cta_cadence": 1},
         )
 
         response = client.post(
@@ -91,6 +92,7 @@ class TestAuditEndpoint:
             "suggestions_made": 3,
             "comments_made": 5,
             "stopped_due_to_max_rounds": False,
+            "category_counts": {"tone_drift": 2, "cta_cadence": 1},
         }
         mock_docs_client.assert_called_once_with("fake-token", include_drive=True)
         mock_llm_client.assert_called_once_with(model="custom/model")
@@ -127,6 +129,7 @@ class TestAuditEndpoint:
         )
 
         assert response.status_code == 200
+        assert response.json()["category_counts"] == {}
         mock_llm_client.assert_called_once_with(model="google/gemini-2.5-flash")
         mock_run_agent.assert_called_once_with(
             docs_client=mock_docs_client.return_value,
