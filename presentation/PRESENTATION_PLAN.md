@@ -25,7 +25,7 @@ Output honesty: the model's findings are not deterministic — the same draft ca
 
 **3. Loop — Observe** — Karl: a copywriter clicks "Run Verbatim Audit" in the Add-on sidebar (brief + channel already filled in), and Verbatim fetches the draft and brief via the Docs/Drive API, no copy-pasting into another tool. Christina: her deterministic evaluator runs in parallel over what's black-and-white — banned words, formatting mechanics, channel limits (defined concretely, e.g. Twitter's character cap) — via regex, no model call.
 
-**4. Loop — Decide** — Christina: her evaluator's findings get handed to the model as citable evidence rather than something it has to re-derive. Karl: the LLM tool-calling loop judges the four things that need actual judgment, each given a plain-language gloss in the same breath: tone drift (does it still sound like the brand), information hierarchy (is the important stuff said first, not buried), CTA cadence (CTA = "call to action," the part of the copy telling someone what to do next — is there a clear one, and does it show up at the right time, not too often), and readability.
+**4. Loop — Decide** — Christina: her evaluator's findings get fed straight into the model's system prompt as citable evidence rather than something it has to re-derive. Karl: that same system prompt is what makes the model judge the four things that need actual judgment, each given a plain-language gloss in the same breath: tone drift (does it still sound like the brand), information hierarchy (is the important stuff said first, not buried), CTA cadence (CTA = "call to action," the part of the copy telling someone what to do next — is there a clear one, and does it show up at the right time, not too often), and readability.
 
 **5. Loop — Act** — Karl: the model calls `create_suggestion` (Docs API `batchUpdate`) for rewrites or `create_inline_comment` (Drive API) for structural issues, loops until done or capped, prints a run summary.
 
@@ -65,8 +65,8 @@ Each line is its own list item on purpose — a plain line break collapses into 
 
 **[Slide 4 — 2:05–3:00, Christina then Karl]**
 
-- CHRISTINA: "Whatever my evaluator flags gets handed to the model as evidence, instead of the model guessing at the same rules a second time."
-- KARL: "The model takes the four things that actually need judgment, not pattern matching. Does the writing still sound like the brand, or has the tone drifted. Is the important information said first, or is it buried three paragraphs down — that's what we call information hierarchy. Is there a clear ask, and does it show up at the right moment and not too often — that's CTA cadence. CTA means 'call to action' — the part of the copy that tells someone what to actually do next, like 'sign up' or 'buy now.' And is it actually easy to read. The model gets Christina's findings, the brand guidelines, the document, and the brief, all in one prompt, and decides what to flag."
+- CHRISTINA: "Whatever my evaluator flags gets fed straight into the model's system prompt — the instructions that shape everything it does — as evidence it can point to, instead of guessing at the same rules a second time."
+- KARL: "That same system prompt is what makes the model judge the four things that actually need judgment, not pattern matching. Does the writing still sound like the brand, or has the tone drifted. Is the important information said first, or is it buried three paragraphs down — that's what we call information hierarchy. Is there a clear ask, and does it show up at the right moment and not too often — that's CTA cadence. CTA means 'call to action' — the part of the copy that tells someone what to actually do next, like 'sign up' or 'buy now.' And is it actually easy to read. Christina's findings, the brand guidelines, the document, and the brief all go into that one system prompt, and the model decides what to flag."
 
 **[Slide 5 — 3:00–3:20, Karl]**
 
