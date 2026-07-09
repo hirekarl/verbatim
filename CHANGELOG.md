@@ -1,3 +1,9 @@
+## v0.11.1 (2026-07-09)
+
+### Fix
+
+- **hooks**: update gitleaks to v8.30.1 for Go 1.24 compatibility (#43)
+
 ## v0.11.0 (2026-07-09)
 
 ### Feat
