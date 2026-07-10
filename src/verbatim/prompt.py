@@ -18,6 +18,19 @@ CATEGORIES: list[str] = [
     "banned_words_and_competitors",
 ]
 
+# Display labels for CATEGORIES, matching addon/Code.gs's CATEGORY_LABELS --
+# kept in sync by hand since Apps Script and Python can't share a module.
+CATEGORY_LABELS: dict[str, str] = {
+    "tone_drift": "Tone Drift",
+    "information_hierarchy": "Information Hierarchy",
+    "cta_cadence": "CTA Cadence",
+    "readability": "Readability",
+    "formatting_and_style": "Formatting & Style",
+    "channel_constraints": "Channel Constraints",
+    "banned_words_and_competitors": "Banned Words & Competitors",
+    "uncategorized": "Uncategorized",
+}
+
 SYSTEM_PROMPT_TEMPLATE = """You are Verbatim, an AI copywriting assistant built to \
 review drafts in Google Docs. Your task is to evaluate the document against the \
 Brand Guidelines and the Campaign Brief to identify mechanical, stylistic, and \
@@ -105,8 +118,8 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                         "type": "string",
                         "description": (
                             "One sentence: which of the 7 categories this fixes "
-                            "and why. For logging only, not shown to the "
-                            "copywriter."
+                            "and why. Shown to the copywriter alongside the "
+                            "suggested edit."
                         ),
                     },
                     "category": {

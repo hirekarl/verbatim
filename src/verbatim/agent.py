@@ -1,13 +1,28 @@
 """Single-pass tool-calling agent loop for auditing a Google Doc."""
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from verbatim.brand_guidelines import BrandGuidelines
 from verbatim.docs_client import DocsClientError, GoogleDocsClient
 from verbatim.evaluator import BrandGuidelinesEvaluator
 from verbatim.llm_client import OpenRouterClient, ToolCall
 from verbatim.prompt import TOOL_SCHEMAS, build_system_prompt
+
+
+@dataclass(frozen=True)
+class Finding:
+    """One issue the agent actually posted to the document.
+
+    ``detail`` is the suggestion's ``rationale`` or the comment's own text --
+    either way, the human-readable explanation of what was wrong, for
+    display on a results screen (CLI summary, Add-on results card).
+    """
+
+    category: str
+    kind: Literal["suggestion", "comment"]
+    matched_text: str
+    detail: str
 
 
 @dataclass(frozen=True)
@@ -19,6 +34,7 @@ class AgentRunResult:
     transcript: list[dict[str, Any]]
     stopped_due_to_max_rounds: bool = False
     category_counts: dict[str, int] = field(default_factory=dict)
+    findings: list[Finding] = field(default_factory=list)
 
 
 def _find_anchor_text(body_text: str) -> str | None:
@@ -126,6 +142,7 @@ def run_agent(
     suggestions_made = 0
     comments_made = 0
     category_counts: dict[str, int] = {}
+    findings: list[Finding] = []
     stopped_due_to_max_rounds = True
     # Tracks (tool_name, matched_text) pairs already dispatched, so the model
     # re-flagging the same span in a later round (e.g. once during its
@@ -142,13 +159,16 @@ def run_agent(
             break
 
         for tool_call in result.tool_calls:
-            outcome, made_suggestion, made_comment, category = _dispatch_tool_call(
+            outcome, made_suggestion, made_comment, finding = _dispatch_tool_call(
                 docs_client, document_id, tool_call, seen_spans
             )
             suggestions_made += made_suggestion
             comments_made += made_comment
-            if category is not None:
-                category_counts[category] = category_counts.get(category, 0) + 1
+            if finding is not None:
+                category_counts[finding.category] = (
+                    category_counts.get(finding.category, 0) + 1
+                )
+                findings.append(finding)
             messages.append(
                 {
                     "role": "tool",
@@ -163,6 +183,7 @@ def run_agent(
         transcript=messages,
         stopped_due_to_max_rounds=stopped_due_to_max_rounds,
         category_counts=category_counts,
+        findings=findings,
     )
 
 
@@ -171,7 +192,7 @@ def _dispatch_tool_call(
     document_id: str,
     tool_call: ToolCall,
     seen_spans: set[tuple[str, str]],
-) -> tuple[str, int, int, str | None]:
+) -> tuple[str, int, int, Finding | None]:
     """Dispatch one tool call to GoogleDocsClient, returning a tool-result message.
 
     Args:
@@ -185,14 +206,14 @@ def _dispatch_tool_call(
 
     Returns:
         A tuple of (result text for the model, suggestions made, comments
-        made, category). ``category`` is the tool call's category on a real
-        successful dispatch, or ``None`` on any skip/error/unknown-tool
-        branch. The schema's ``required`` list isn't hard-enforced by
-        OpenRouter/OpenAI-style function calling, so a dispatched call
-        missing ``category`` falls back to ``"uncategorized"`` rather than
-        raising. DocsClientError failures are caught and surfaced as result
-        text rather than raised, giving the model a chance to retry in the
-        same run.
+        made, finding). ``finding`` is set on a real successful dispatch, or
+        ``None`` on any skip/error/unknown-tool branch. The schema's
+        ``required`` list isn't hard-enforced by OpenRouter/OpenAI-style
+        function calling, so a dispatched call missing ``category`` falls
+        back to ``"uncategorized"``, and one missing ``rationale`` falls
+        back to an empty detail, rather than raising. DocsClientError
+        failures are caught and surfaced as result text rather than raised,
+        giving the model a chance to retry in the same run.
     """
     try:
         if tool_call.name == "create_suggestion":
@@ -214,21 +235,32 @@ def _dispatch_tool_call(
                 replacement_text=replacement,
             )
             seen_spans.add(span_key)
-            category = tool_call.arguments.get("category", "uncategorized")
-            return "Suggestion created.", 1, 0, category
+            finding = Finding(
+                category=tool_call.arguments.get("category", "uncategorized"),
+                kind="suggestion",
+                matched_text=matched,
+                detail=tool_call.arguments.get("rationale", ""),
+            )
+            return "Suggestion created.", 1, 0, finding
         if tool_call.name == "create_inline_comment":
             matched = tool_call.arguments["matched_text"]
             span_key = (tool_call.name, matched)
             if span_key in seen_spans:
                 return "Already flagged this text; skipping duplicate.", 0, 0, None
+            comment = tool_call.arguments["comment"]
             docs_client.create_inline_comment(
                 document_id=document_id,
                 matched_text=matched,
-                comment=tool_call.arguments["comment"],
+                comment=comment,
             )
             seen_spans.add(span_key)
-            category = tool_call.arguments.get("category", "uncategorized")
-            return "Comment created.", 0, 1, category
+            finding = Finding(
+                category=tool_call.arguments.get("category", "uncategorized"),
+                kind="comment",
+                matched_text=matched,
+                detail=comment,
+            )
+            return "Comment created.", 0, 1, finding
         return f"Unknown tool: {tool_call.name}", 0, 0, None
     except DocsClientError as err:
         return f"Error: {err}", 0, 0, None

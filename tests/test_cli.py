@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from pytest_mock import MockerFixture
 
-from verbatim.agent import AgentRunResult
+from verbatim.agent import AgentRunResult, Finding
 from verbatim.cli import main
 from verbatim.docs_client import DocsClientError
 from verbatim.llm_client import LLMClientError
@@ -97,6 +97,48 @@ class TestCLI:
         assert "Suggestions posted: 3" in captured.out
         assert "Comments posted:    5" in captured.out
         assert "Max rounds cap hit: No" in captured.out
+
+    def test_cli_prints_findings_grouped_by_category(
+        self,
+        mock_run_agent: MagicMock,
+        mock_docs_client: MagicMock,
+        mock_llm_client: MagicMock,
+        mock_brand_guidelines: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Each finding is printed with its category label, matched text, and detail."""
+        fake_result = AgentRunResult(
+            suggestions_made=1,
+            comments_made=1,
+            transcript=[],
+            stopped_due_to_max_rounds=False,
+            category_counts={"readability": 1, "information_hierarchy": 1},
+            findings=[
+                Finding(
+                    category="readability",
+                    kind="suggestion",
+                    matched_text="Feature helps you",
+                    detail="Passive voice; rewrite as active.",
+                ),
+                Finding(
+                    category="information_hierarchy",
+                    kind="comment",
+                    matched_text="Big News!",
+                    detail="Lead with value instead.",
+                ),
+            ],
+        )
+        mock_run_agent.return_value = fake_result
+
+        main(["doc-id", "brief-id"])
+
+        captured = capsys.readouterr()
+        assert "Readability" in captured.out
+        assert "Feature helps you" in captured.out
+        assert "Passive voice; rewrite as active." in captured.out
+        assert "Information Hierarchy" in captured.out
+        assert "Big News!" in captured.out
+        assert "Lead with value instead." in captured.out
 
     def test_cli_success_defaults(
         self,
