@@ -1,0 +1,9 @@
+Campaign Brief: CRM Integration Free Trial Landing Page
+
+Channel: Web landing page
+Audience: Small business owners who currently export CRM data by hand into their email tool
+Goal: Get visitors to start a free trial of the new CRM integration
+Key message: Connecting your CRM to your email tool removes the manual, error-prone data transfer between the two, so campaigns always go out to the right list
+Primary CTA: Start your free trial
+Tone: Confident, plain, benefits-first
+Must avoid: Asking for the sign-up before explaining why it matters; burying the problem/value statement below other content

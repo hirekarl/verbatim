@@ -1,0 +1,9 @@
+Campaign Brief: Mobile App Update Announcement
+
+Channel: Twitter
+Audience: Existing app users following the company account
+Goal: Get existing users to download the new app update
+Key message: The update fixes the sync bug that's been dropping notes overnight, and adds folders
+Primary CTA: Download the update
+Tone: Friendly, brief, one clear CTA
+Must avoid: Repeating the ask more than once per post; asking before the value is explained
