@@ -242,3 +242,7 @@ token.pickle
 
 ### Verbatim: per-developer Apps Script project binding (never commit) ###
 addon/.clasp.json
+
+### Verbatim: generated presentation deck (regenerate via presentation/build_deck.py) ###
+presentation/*.pptx
+presentation/~$*.pptx
