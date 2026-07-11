@@ -28,26 +28,31 @@ Feature work should be substantially complete by **Thu Jul 16**, leaving **Fri J
 - [ ] Retarget `tests/test_agent.py`'s dispatch/dedup/error-handling tests onto `_run_single_agent_loop`.
 - [ ] Wire `run_agent()` to the new split behind `run_agent_legacy`.
 
-### Tue Jul 14
+### Tue Jul 14 — Eval Card validation, split by agent ownership
 
-- [ ] Eval Card before/after comparison (golden/edge/adversarial + `presentation/demo/*` fixtures) between `run_agent_legacy` and the new split; fix regressions; go/no-go call on flipping the default.
+- [ ] **Christina**: run golden/edge/adversarial fixtures (+ `presentation/demo/*`) against the Structural agent (Info Hierarchy + CTA Cadence); fix anything found in `prompts/structural.py`.
+- [ ] **Karl**: same for the Line-Editor agent (Tone Drift + Readability) in `prompts/line_editor.py`.
+- [ ] **Both**: end-of-day sync — go/no-go call on flipping `run_agent()`'s default to the new split.
 
 ### Wed Jul 15
 
-- [ ] Phase 2 concurrency: `ThreadPoolExecutor` dispatch, `docs_client.py` write lock, two independent `OpenRouterClient` instances, concurrency test.
+- [ ] **Karl**: Phase 2 concurrency — `ThreadPoolExecutor` dispatch, `docs_client.py` write lock, two independent `OpenRouterClient` instances, concurrency test.
+- [ ] **Christina**: pick up the deferred `formatting_and_style` general title/sentence-case check ([#11](https://github.com/hirekarl/verbatim/issues/11)) in `evaluator.py` — unrelated file, no collision.
 
 ### Thu Jul 16 — buffer/polish, feature-complete
 
-- [ ] Full regression (`pytest`, `ruff`, `mypy`, `--cov-fail-under=90`).
-- [ ] CHANGELOG/README updates.
-- [ ] Merge `multi-agent-plan` into `main`.
+- [ ] **Karl**: full regression (`pytest`, `ruff`, `mypy`, `--cov-fail-under=90`).
+- [ ] **Karl**: merge `multi-agent-plan` into `main`.
+- [ ] **Christina**: CHANGELOG/README updates for the new architecture.
+- [ ] **Christina**: final coverage pass on `tests/test_prompts_structural.py`.
 
 ### Fri Jul 17 — demo prep only (not a sprint day)
 
-- [ ] Update `presentation/build_deck.py` / `PRESENTATION_PLAN.md` / demo fixtures for the new architecture.
-- [ ] Rehearse end to end.
+- [ ] **Christina**: prep structural-category demo fixtures/triggers.
+- [ ] **Karl**: prep line-editor-category triggers plus deck mechanics (`presentation/build_deck.py` / `PRESENTATION_PLAN.md`).
+- [ ] **Both**: rehearse end to end.
 
-### Sat Jul 18 — demo
+### Sat Jul 18 — demo (both)
 
 ## Sprint 2 file/component ownership map
 
@@ -61,7 +66,9 @@ See `MULTI_AGENT_PLAN.md`'s "File/module plan" for the authoritative version; su
 | Orchestrator + result merging          | `src/verbatim/orchestrator.py` (new)             | Karl      |
 | Docs API write-serialization (Phase 2) | `src/verbatim/docs_client.py`                    | Karl      |
 
-Untouched this sprint: `src/verbatim/evaluator.py`, `brand_guidelines.py`/`.json`, `tests/test_evaluator.py`, `http_api.py`, `cli.py`, `addon/`.
+Untouched this sprint except for **Christina**'s Wed slot on `#11` (see day-by-day above): `src/verbatim/evaluator.py`, `brand_guidelines.py`/`.json`, `tests/test_evaluator.py`, `http_api.py`, `cli.py`, `addon/`.
+
+Non-file tasks (Eval Card validation, the #11 pickup) are split by day above rather than in this table, since they're not tied one-to-one to a file.
 
 ## Deferred backlog (carried over from Sprint 1)
 
