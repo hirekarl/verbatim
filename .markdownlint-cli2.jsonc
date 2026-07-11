@@ -6,6 +6,7 @@
   "ignores": [
     "docs/PRD.snapshot.md",
     "docs/research-notes.snapshot.md",
+    "docs/multi-agent-prd.snapshot.md",
     "CHANGELOG.md"
   ]
 }
