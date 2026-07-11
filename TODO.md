@@ -14,9 +14,9 @@ Feature work should be substantially complete by **Thu Jul 16**, leaving **Fri J
 
 - [x] Write `MULTI_AGENT_PLAN.md` (architecture, rationale, file/module plan, schedule).
 - [x] Create `multi-agent-plan` branch.
-- [ ] Commit `MULTI_AGENT_PLAN.md`, push the branch, open a PR.
-- [ ] Write failing contract tests for `prompts/structural.py` (category list, tool schema shape, system-prompt template contents) and for `orchestrator.reconcile_findings()`.
-- [ ] Stub `prompts/line_editor.py` and `orchestrator.py` signatures so imports resolve.
+- [x] Commit `MULTI_AGENT_PLAN.md`, push the branch, open a PR.
+- [x] Write failing contract tests for `prompts/structural.py` (category list, tool schema shape, system-prompt template contents) and for `orchestrator.reconcile_findings()`.
+- [x] Stub `prompts/line_editor.py` and `orchestrator.py` signatures so imports resolve.
 
 ### Sun Jul 12 (Christina, solo — Karl out)
 
