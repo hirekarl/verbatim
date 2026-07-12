@@ -20,7 +20,7 @@ Feature work should be substantially complete by **Thu Jul 16**, leaving **Fri J
 
 ### Sun Jul 12 (Christina, solo — Karl out)
 
-- [ ] Implement `src/verbatim/prompts/structural.py` against the pre-written failing tests. (This is the "Christina's rotation into Docs API/agent territory" backlog item from Sprint 1 — see below — now actually underway.)
+- [x] Implement `src/verbatim/prompts/structural.py` against the pre-written failing tests. (This is the "Christina's rotation into Docs API/agent territory" backlog item from Sprint 1 — see below — now actually underway.)
 
 ### Sun Jul 12 (Karl, out-of-band)
 
