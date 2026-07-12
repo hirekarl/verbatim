@@ -1113,6 +1113,69 @@ class TestBrandGuidelinesEvaluator:
             ]
             assert len(guys_violations) > 0, f"Should flag 'guys' with comma: {text}"
 
+    def test_guys_with_article_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that 'the guys', 'those guys', etc. are detected (issue #49)."""
+        test_cases = [
+            "Ask the guys about it.",
+            "Those guys know the answer.",
+            "Our guys will handle it.",
+        ]
+
+        for text in test_cases:
+            violations = evaluator.evaluate(text)
+            guys_violations = [
+                v
+                for v in violations
+                if v.category == "formatting_and_style" and "guys" in v.message.lower()
+            ]
+            assert len(guys_violations) > 0, f"Should flag 'guys' in: {text}"
+
+    def test_website_capitalized_mid_sentence_flagged(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that 'Website' capitalized mid-sentence is detected (issue #48)."""
+        test_cases = [
+            ("Visit our Website today.", "Website", "website"),
+            ("Check the Website for details.", "Website", "website"),
+            ("Our Website has more info.", "Website", "website"),
+        ]
+
+        for text, wrong_form, correct_form in test_cases:
+            violations = evaluator.evaluate(text)
+            spelling_violations = [
+                v
+                for v in violations
+                if v.category == "banned_words_and_competitors"
+                and "spelling" in v.message.lower()
+            ]
+            assert len(spelling_violations) > 0, (
+                f"Expected capitalized '{wrong_form}' mid-sentence in {text!r}"
+            )
+            violation = spelling_violations[0]
+            assert violation.suggestion == correct_form, (
+                f"Expected suggestion '{correct_form}', got '{violation.suggestion}'"
+            )
+
+    def test_website_at_sentence_start_no_violation(
+        self, evaluator: BrandGuidelinesEvaluator
+    ) -> None:
+        """Test that 'Website' at sentence start is allowed (issue #48)."""
+        text = "Website updates are coming soon."
+        violations = evaluator.evaluate(text)
+
+        website_violations = [
+            v
+            for v in violations
+            if v.category == "banned_words_and_competitors"
+            and "website" in v.message.lower()
+            and "spelling" in v.message.lower()
+        ]
+        assert len(website_violations) == 0, (
+            "Should NOT flag 'Website' at sentence start"
+        )
+
     def test_lowercase_heritage_terms_flagged(
         self, evaluator: BrandGuidelinesEvaluator
     ) -> None:
