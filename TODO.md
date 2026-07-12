@@ -46,7 +46,7 @@ Christina's exploration of `shared.py` while starting her `structural.py` work s
 ### Wed Jul 15
 
 - [ ] **Karl**: Phase 2 concurrency — `ThreadPoolExecutor` dispatch, `docs_client.py` write lock, two independent `OpenRouterClient` instances, concurrency test.
-- [ ] **Christina**: pick up the deferred `formatting_and_style` general title/sentence-case check ([#11](https://github.com/hirekarl/verbatim/issues/11)) in `evaluator.py` — unrelated file, no collision.
+- [ ] **Christina**: unassigned/TBD. Her originally-planned task here (the `formatting_and_style` title/sentence-case check, [#11](https://github.com/hirekarl/verbatim/issues/11)) already shipped in PR #40 on Jul 9, before this sprint plan was written — caught during PR #46 review. Revisit after Tue Jul 14's Eval Card sync, once there's real signal on what needs work.
 
 ### Thu Jul 16 — buffer/polish, feature-complete
 
@@ -76,15 +76,15 @@ See `MULTI_AGENT_PLAN.md`'s "File/module plan" for the authoritative version; su
 | Docs API write-serialization (Phase 2) | `src/verbatim/docs_client.py`                    | Karl      |
 | Legacy single-agent validation         | `src/verbatim/agent.py`                          | Karl      |
 
-Untouched this sprint except for **Christina**'s Wed slot on `#11` (see day-by-day above): `src/verbatim/evaluator.py`, `brand_guidelines.py`/`.json`, `tests/test_evaluator.py`, `http_api.py`, `cli.py`, `addon/`.
+Untouched this sprint: `src/verbatim/evaluator.py`, `brand_guidelines.py`/`.json`, `tests/test_evaluator.py`, `http_api.py`, `cli.py`, `addon/` — unless Christina's still-TBD Wed Jul 15 slot (see day-by-day above) ends up landing in `evaluator.py`.
 
-Non-file tasks (Eval Card validation, the #11 pickup) are split by day above rather than in this table, since they're not tied one-to-one to a file.
+Non-file tasks (Eval Card validation) are split by day above rather than in this table, since they're not tied one-to-one to a file.
 
 ## Deferred backlog (carried over from Sprint 1)
 
 - [ ] `BOOTSTRAPPING.md`'s verification checklist walkthrough (optional sanity pass — every actual governance item it covers is already live).
 - [x] Christina's rotation into Docs API/agent-loop territory — now underway as Sprint 2's Sun Jul 12 task (see above), no longer a separate backlog item.
-- [ ] `formatting_and_style` general title/sentence-case check for body copy — tracked as [#11](https://github.com/hirekarl/verbatim/issues/11).
+- [x] `formatting_and_style` general title/sentence-case check for body copy — [#11](https://github.com/hirekarl/verbatim/issues/11) *(merged in #40, Jul 9, ahead of this backlog list being written)*.
 - [ ] [#33](https://github.com/hirekarl/verbatim/issues/33) Front the Cloud Run backend with an internal auth-proxy to drop `--allow-unauthenticated` — deliberately deferred, not part of the initial deploy.
 
 ## Workspace Add-on migration backlog
