@@ -376,6 +376,53 @@ class TestRunAgent:
             )
         ]
 
+    def test_unrecognized_category_falls_back_to_uncategorized(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        brand_guidelines: BrandGuidelines,
+    ) -> None:
+        """A tool call with an out-of-vocabulary category still counts, under
+        'uncategorized' -- not as a new, silent category_counts key.
+
+        Same reasoning as the missing-category fallback above, but for the
+        case where the model *does* type a category, just not one of the 7
+        (a typo like 'info_hierarchy', wrong casing, or -- once the
+        multi-agent split lands -- a real category borrowed from the wrong
+        specialist agent)."""
+        suggestion_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            arguments={
+                "matched_text": "Feature",
+                "replacement_text": "Capability",
+                "category": "info_hierarchy",
+            },
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(suggestion_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = run_agent(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            brief_id="brief-id",
+            brand_guidelines=brand_guidelines,
+        )
+
+        assert result.suggestions_made == 1
+        assert result.category_counts == {"uncategorized": 1}
+        assert result.findings == [
+            Finding(
+                category="uncategorized",
+                kind="suggestion",
+                matched_text="Feature",
+                detail="",
+            )
+        ]
+
     def test_missing_rationale_falls_back_to_empty_detail(
         self,
         docs_client: MagicMock,

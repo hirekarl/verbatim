@@ -22,9 +22,18 @@ Feature work should be substantially complete by **Thu Jul 16**, leaving **Fri J
 
 - [ ] Implement `src/verbatim/prompts/structural.py` against the pre-written failing tests. (This is the "Christina's rotation into Docs API/agent territory" backlog item from Sprint 1 — see below — now actually underway.)
 
+### Sun Jul 12 (Karl, out-of-band)
+
+Christina's exploration of `shared.py` while starting her `structural.py` work surfaced a real validation gap — category tags aren't hard-enforced against the 7-category vocabulary, only advisory via a JSON-schema `enum`. Full writeup: `MULTI_AGENT_PLAN.md`'s "Category validation" section. Done entirely in Karl-owned files, no collision with Christina's `structural.py` task above.
+
+- [x] Implement `src/verbatim/prompts/shared.py` (`CATEGORIES` relocated from `prompt.py`, new `validate_category()`).
+- [x] Wire `validate_category` into `agent.py`'s `_dispatch_tool_call` (closes the gap in the currently-deployed Sprint-1 path).
+- [x] Lock `orchestrator._run_single_agent_loop`'s new `allowed_categories` parameter (signature/docstring only — body still stubbed for Monday).
+
 ### Mon Jul 13 (Karl back)
 
 - [ ] Implement `prompts/line_editor.py` and `orchestrator.py` Phase 1 (sequential dispatch + `reconcile_findings`).
+- [ ] Wire `_run_single_agent_loop`'s `allowed_categories` param (`STRUCTURAL_CATEGORIES`/`LINE_EDITOR_CATEGORIES`) through `validate_category` at both specialist call sites — contract locked Sun Jul 12.
 - [ ] Retarget `tests/test_agent.py`'s dispatch/dedup/error-handling tests onto `_run_single_agent_loop`.
 - [ ] Wire `run_agent()` to the new split behind `run_agent_legacy`.
 
@@ -65,6 +74,7 @@ See `MULTI_AGENT_PLAN.md`'s "File/module plan" for the authoritative version; su
 | Line-Editor agent (Tone, Readability)  | `src/verbatim/prompts/line_editor.py`, its tests | Karl      |
 | Orchestrator + result merging          | `src/verbatim/orchestrator.py` (new)             | Karl      |
 | Docs API write-serialization (Phase 2) | `src/verbatim/docs_client.py`                    | Karl      |
+| Legacy single-agent validation         | `src/verbatim/agent.py`                          | Karl      |
 
 Untouched this sprint except for **Christina**'s Wed slot on `#11` (see day-by-day above): `src/verbatim/evaluator.py`, `brand_guidelines.py`/`.json`, `tests/test_evaluator.py`, `http_api.py`, `cli.py`, `addon/`.
 

@@ -8,6 +8,7 @@ from verbatim.docs_client import DocsClientError, GoogleDocsClient
 from verbatim.evaluator import BrandGuidelinesEvaluator
 from verbatim.llm_client import OpenRouterClient, ToolCall
 from verbatim.prompt import TOOL_SCHEMAS, build_system_prompt
+from verbatim.prompts.shared import CATEGORIES, validate_category
 
 
 @dataclass(frozen=True)
@@ -207,13 +208,15 @@ def _dispatch_tool_call(
     Returns:
         A tuple of (result text for the model, suggestions made, comments
         made, finding). ``finding`` is set on a real successful dispatch, or
-        ``None`` on any skip/error/unknown-tool branch. The schema's
-        ``required`` list isn't hard-enforced by OpenRouter/OpenAI-style
-        function calling, so a dispatched call missing ``category`` falls
-        back to ``"uncategorized"``, and one missing ``rationale`` falls
-        back to an empty detail, rather than raising. DocsClientError
-        failures are caught and surfaced as result text rather than raised,
-        giving the model a chance to retry in the same run.
+        ``None`` on any skip/error/unknown-tool branch. Neither the schema's
+        ``required`` list nor its ``category`` ``enum`` is hard-enforced by
+        OpenRouter/OpenAI-style function calling, so a dispatched call's
+        ``category`` is run through ``validate_category`` -- missing or not
+        one of the 7 known categories both fall back to ``"uncategorized"``
+        -- and a call missing ``rationale`` falls back to an empty detail,
+        rather than raising. DocsClientError failures are caught and
+        surfaced as result text rather than raised, giving the model a
+        chance to retry in the same run.
     """
     try:
         if tool_call.name == "create_suggestion":
@@ -236,7 +239,9 @@ def _dispatch_tool_call(
             )
             seen_spans.add(span_key)
             finding = Finding(
-                category=tool_call.arguments.get("category", "uncategorized"),
+                category=validate_category(
+                    tool_call.arguments.get("category"), CATEGORIES
+                ),
                 kind="suggestion",
                 matched_text=matched,
                 detail=tool_call.arguments.get("rationale", ""),
@@ -255,7 +260,9 @@ def _dispatch_tool_call(
             )
             seen_spans.add(span_key)
             finding = Finding(
-                category=tool_call.arguments.get("category", "uncategorized"),
+                category=validate_category(
+                    tool_call.arguments.get("category"), CATEGORIES
+                ),
                 kind="comment",
                 matched_text=matched,
                 detail=comment,

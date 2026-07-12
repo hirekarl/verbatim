@@ -37,14 +37,24 @@ Before flipping the default from `run_agent_legacy` to the new split, run the PR
 
 To keep Karl/Christina ownership disjoint (an existing, explicit design goal), `prompt.py` becomes a package rather than one shared file both of them would need to touch:
 
-- `src/verbatim/prompts/shared.py` (Karl) — `CATEGORIES`, the prompt-assembly helper, the deterministic-findings block. Logic relocated from `prompt.py` unchanged.
+- `src/verbatim/prompts/shared.py` (Karl) — `CATEGORIES`, `validate_category()`, the prompt-assembly helper, the deterministic-findings block. Logic relocated from `prompt.py` unchanged.
 - `src/verbatim/prompts/structural.py` (**Christina**) — `STRUCTURAL_CATEGORIES`, its system prompt template, `build_structural_system_prompt()`, `STRUCTURAL_TOOL_SCHEMAS` (comment-only, category enum restricted to `["information_hierarchy", "cta_cadence"]`).
 - `src/verbatim/prompts/line_editor.py` (Karl) — mirror of the above for Tone Drift + Readability, suggestion-only.
-- `src/verbatim/orchestrator.py` (Karl, new file) — `_run_single_agent_loop()` (extracted from today's `agent.py` loop body), `reconcile_findings()`, and the rewritten `run_agent()` entrypoint (Phase 1 sequential; Phase 2 swaps in `ThreadPoolExecutor`).
+- `src/verbatim/orchestrator.py` (Karl, new file) — `_run_single_agent_loop()` (extracted from today's `agent.py` loop body, takes an `allowed_categories` param and validates each dispatched finding's category against it — see "Category validation" below), `reconcile_findings()`, and the rewritten `run_agent()` entrypoint (Phase 1 sequential; Phase 2 swaps in `ThreadPoolExecutor`).
 - `src/verbatim/docs_client.py` (Karl) — add `threading.Lock`, Phase 2 only.
 - Tests: `tests/test_prompts_structural.py` (**Christina**), `tests/test_prompts_line_editor.py` plus a retargeted `tests/test_agent.py` (Karl).
 
 **Untouched:** `src/verbatim/evaluator.py`, `brand_guidelines.py`/`.json`, `tests/test_evaluator.py` (Christina's existing files — `evaluate()` is still called exactly once, unfiltered, by the orchestrator), `http_api.py`, `cli.py`, `addon/Backend.gs`, `addon/Code.gs`.
+
+## Category validation
+
+Christina, while working through where the category vocabulary should live for `prompts/structural.py` (Sun Jul 12), surfaced a gap: the 7 category tags are just strings the model has to type correctly into every tool call. The only existing enforcement is a JSON-schema `enum` on the `category` parameter (`prompt.py`'s `TOOL_SCHEMAS`), but OpenRouter/OpenAI-style function calling doesn't hard-enforce a schema `enum` or `required` server-side — a model can still return `category` missing, misspelled (`"info_hierarchy"`), differently cased, or — once the specialist split lands — a real category that belongs to the *other* agent (e.g. Structural tagging a finding `tone_drift`). That silently fragments `AgentRunResult.category_counts`, which is indistinguishable from a genuine zero-findings case and feeds directly into the PRD's Eval Card per-category coverage comparison. This is the same "soft instruction vs. hard constraint" gap the comment-vs-suggestion tool split above closes for tool *choice* — just one layer down, on the tag string itself.
+
+**Fix:** `src/verbatim/prompts/shared.py` exposes `validate_category(category, allowed) -> str`, which returns `category` unchanged if it's in the caller's `allowed` list, else falls back to `"uncategorized"` — the same fallback value and philosophy `agent.py` already uses (and is tested) for a missing `category`, just now also covering "present but not allowed." Each caller passes its *own* allowed set: the full `CATEGORIES` for the legacy single-agent path (`agent.py`, wired Sun Jul 12), and each specialist's own narrower list (`STRUCTURAL_CATEGORIES`, `LINE_EDITOR_CATEGORIES`) once `orchestrator._run_single_agent_loop` is implemented Mon Jul 13 — so a Structural finding mistagged `tone_drift` is caught too, not just outright typos.
+
+**Enforced at dispatch time only** (`agent.py`'s `_dispatch_tool_call` today; `orchestrator._run_single_agent_loop` Monday) — deliberately **not** duplicated in `reconcile_findings`. Every `Finding` is constructed at dispatch, so by the time two `AgentRunResult`s reach `reconcile_findings` their categories are already valid; re-checking there would validate data that can't be invalid by construction, which is exactly the unneeded defense this project's process norms (see `CLAUDE.md`) say to avoid. `reconcile_findings` also has no way to know which agent's narrower allowed-list a given merged key should be checked against, since it merges both into one union.
+
+No logging was added (a first for this codebase would need its own convention decision) — silent fallback matches the existing tested precedent exactly. Worth revisiting once the Tue Jul 14 Eval Card runs give real data on how often `uncategorized` actually fires.
 
 ## Sprint schedule (Sat Jul 11 – Sat Jul 18)
 
