@@ -11,6 +11,11 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 DEFAULT_SCOPES = ["https://www.googleapis.com/auth/documents.readonly"]
+# TODO(karl): Consider narrowing `drive` to `drive.file` for least-privilege.
+# The PRD (section 3a) only requires access to the target doc and brief, not
+# all Drive files. `drive.file` limits access to files the app opens, while
+# `drive` grants access to the user's entire Drive. See:
+# https://developers.google.com/identity/protocols/oauth2/scopes#drive
 WRITE_SCOPES = [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/drive",
