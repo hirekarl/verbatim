@@ -1,20 +1,18 @@
 """Contract tests for verbatim.prompts.structural.
 
-Written before `prompts/structural.py` exists, as the TDD red step locking
-the interface for Christina's Sun Jul 12 solo implementation -- see
-`TODO.md` and `MULTI_AGENT_PLAN.md`. This suite is expected to fail at
-collection (`ModuleNotFoundError`) until that module is created.
+Originally written before `prompts/structural.py` existed, as the TDD red step
+locking the interface for Christina's Sun Jul 12 solo implementation -- see
+`TODO.md` and `MULTI_AGENT_PLAN.md`. Module implemented Sun Jul 12.
 """
 
-from verbatim.prompts.structural import (  # type: ignore[import-not-found]
+from verbatim.docs_client import CampaignContext, DocumentContent
+from verbatim.evaluator import Violation
+from verbatim.prompts.structural import (
     STRUCTURAL_CATEGORIES,
     STRUCTURAL_SYSTEM_PROMPT_TEMPLATE,
     STRUCTURAL_TOOL_SCHEMAS,
     build_structural_system_prompt,
 )
-
-from verbatim.docs_client import CampaignContext, DocumentContent
-from verbatim.evaluator import Violation
 
 
 class TestStructuralCategories:
