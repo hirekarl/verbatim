@@ -1,3 +1,9 @@
+## v0.11.2 (2026-07-12)
+
+### Fix
+
+- **evaluator**: add Website capitalization and expand guys pattern (#50)
+
 ## v0.11.1 (2026-07-09)
 
 ### Fix

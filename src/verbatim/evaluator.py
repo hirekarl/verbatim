@@ -162,6 +162,11 @@ class BrandGuidelinesEvaluator:
                 "online",
                 "Don't capitalize 'online' mid-sentence",
             ),
+            (
+                r"(?<=[a-z])\s+Website\b",
+                "website",
+                "Don't capitalize 'website' mid-sentence",
+            ),
             # OK/ok variations
             (r"\bok\b", "OK", "Always write as 'OK' (all caps)"),
             (r"\bOk\b", "OK", "Always write as 'OK' (all caps)"),
@@ -809,8 +814,11 @@ class BrandGuidelinesEvaluator:
                 )
 
         # Check for "guys" when referring to groups
-        # Allow optional punctuation/comma in direct address greetings
-        guys_pattern = r"\b(hey|hi|thank(?:s)?|you)\b[\s,]*\bguys\b"
+        # Covers greetings (hey/hi/thanks guys), direct address (you guys),
+        # and article/determiner phrases (the/those/our/your/these guys)
+        guys_pattern = (
+            r"\b(hey|hi|thank(?:s)?|you|the|those|our|your|these)\b[\s,]*\bguys\b"
+        )
         matches = re.finditer(guys_pattern, text, re.IGNORECASE)
         for match in matches:
             violations.append(
