@@ -1057,3 +1057,79 @@ class TestRunAgentLineEditorResilience:
         assert "readability" not in result.category_counts
         assert "tone_drift" not in result.category_counts
         assert result.stopped_due_to_max_rounds is False
+
+
+class TestRunAgentSpecialistFailure:
+    """Coverage for #63: one specialist's thread raising after the other's
+
+    completed successfully -- its writes are already live in the doc, so
+    discarding its result via unconditional fail-fast would misreport a
+    doc-touching run as a total failure. See #63 for the full writeup.
+    """
+
+    def test_returns_partial_result_when_one_specialist_fails(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        brand_guidelines: BrandGuidelines,
+        mocker: MockerFixture,
+    ) -> None:
+        """The surviving specialist's result is still returned, annotated."""
+        line_editor_result = AgentRunResult(
+            suggestions_made=1, comments_made=0, transcript=[]
+        )
+
+        def fake_run_single_agent_loop(**kwargs: Any) -> AgentRunResult:
+            if kwargs["allowed_categories"] == STRUCTURAL_CATEGORIES:
+                raise RuntimeError("structural boom")
+            return line_editor_result
+
+        mocker.patch(
+            "verbatim.orchestrator._run_single_agent_loop",
+            side_effect=fake_run_single_agent_loop,
+        )
+        mock_reconcile = mocker.patch("verbatim.orchestrator.reconcile_findings")
+
+        result = run_agent(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            brief_id="brief-id",
+            brand_guidelines=brand_guidelines,
+        )
+
+        mock_reconcile.assert_not_called()
+        assert result.suggestions_made == 1
+        assert result.comments_made == 0
+        assert result.specialist_errors == {"structural": "structural boom"}
+
+    def test_raises_when_both_specialists_fail(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        brand_guidelines: BrandGuidelines,
+        mocker: MockerFixture,
+    ) -> None:
+        """No partial result is possible; the run failed outright."""
+
+        def fake_run_single_agent_loop(**kwargs: Any) -> AgentRunResult:
+            if kwargs["allowed_categories"] == STRUCTURAL_CATEGORIES:
+                raise RuntimeError("structural boom")
+            raise RuntimeError("line-editor boom")
+
+        mocker.patch(
+            "verbatim.orchestrator._run_single_agent_loop",
+            side_effect=fake_run_single_agent_loop,
+        )
+
+        with pytest.raises(RuntimeError) as exc_info:
+            run_agent(
+                docs_client=docs_client,
+                llm_client=llm_client,
+                document_id="doc-id",
+                brief_id="brief-id",
+                brand_guidelines=brand_guidelines,
+            )
+
+        assert "structural boom" in str(exc_info.value)
+        assert "line-editor boom" in str(exc_info.value)
