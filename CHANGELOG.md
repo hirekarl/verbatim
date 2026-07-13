@@ -1,3 +1,9 @@
+## v0.14.1 (2026-07-13)
+
+### Fix
+
+- **agent**: stop discarding a completed specialist's result on fail-fast (#66)
+
 ## v0.14.0 (2026-07-13)
 
 ### Feat
