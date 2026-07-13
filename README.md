@@ -34,7 +34,7 @@ Verbatim is an AI agent that reviews draft marketing copy inside Google Docs aga
 
 ### How it works
 
-A copywriter kicks off a check from the command line against a draft document and its campaign brief. From there the run is fully automated: Verbatim reads both documents once, runs its deterministic rule checks, then dispatches two specialist LLM agents in sequence — each restricted to its own narrow slice of categories and its own single tool — before a plain-Python orchestrator reconciles their output into one result. Nothing is written until the copywriter reviews it.
+A copywriter kicks off a check from the command line against a draft document and its campaign brief. From there the run is fully automated: Verbatim reads both documents once, runs its deterministic rule checks, then dispatches two specialist LLM agents concurrently on separate threads — each restricted to its own narrow slice of categories and its own single tool, writing to the same document under a per-document write lock — before a plain-Python orchestrator reconciles their output into one result. Nothing is written until the copywriter reviews it.
 
 ```mermaid
 flowchart TD
@@ -45,18 +45,19 @@ flowchart TD
     D --> F["Deterministic evaluator:<br/>banned words, formatting/style, channel limits"]
     E --> G["Orchestrator assembles both<br/>specialist system prompts"]
     F --> G
-    G --> H{"Structural agent<br/>(information hierarchy, CTA cadence)"}
+    G --> H{"Structural agent (thread 1)<br/>(information hierarchy, CTA cadence)"}
+    G --> I{"Line-Editor agent (thread 2)<br/>(tone drift, readability)"}
     H -- "create_inline_comment" --> H
-    H -- "no more tool calls,<br/>or max rounds hit" --> I{"Line-Editor agent<br/>(tone drift, readability)"}
     I -- "create_suggestion" --> I
-    I -- "no more tool calls,<br/>or max rounds hit" --> J[Orchestrator: reconcile_findings]
+    H -- "no more tool calls,<br/>or max rounds hit" --> J[Orchestrator: reconcile_findings]
+    I -- "no more tool calls,<br/>or max rounds hit" --> J
     J --> K["Print run summary<br/>(suggestions/comments made)"]
     K --> L[Copywriter reviews suggestions & comments in Google Docs]
     L --> M[Accept / reject inline]
     M --> N[Draft goes on for strategic sign-off]
 ```
 
-The evaluator and the two specialist agents cover different slices of the 7 audit categories. `BrandGuidelinesEvaluator` handles the mechanically-checkable ones (banned words, formatting/style mechanics, channel constraints) with plain regex — its findings aren't discarded, they're injected into both agents' system prompts as pre-verified, citable evidence. Of the four subjective categories left, the **Structural agent** judges information hierarchy and CTA cadence (whole-document, paragraph-ordering reasoning) and can only call `create_inline_comment` — no rewrite tool — since those issues call for reorganizing, not replacing, text. The **Line-Editor agent** judges tone drift and readability (local, sentence-level rewrites) and can only call `create_suggestion` — no comment tool. Restricting each agent to one tool turns what used to be a soft per-category tool *preference* into a hard constraint neither agent can violate. `orchestrator.py` runs the two sequentially (Phase 1; concurrent dispatch is a planned Phase 2) and merges their results with `reconcile_findings`; the original single-prompt, single-loop implementation is kept as `run_agent_legacy` for comparison. Full rationale: [`MULTI_AGENT_PLAN.md`](MULTI_AGENT_PLAN.md).
+The evaluator and the two specialist agents cover different slices of the 7 audit categories. `BrandGuidelinesEvaluator` handles the mechanically-checkable ones (banned words, formatting/style mechanics, channel constraints) with plain regex — its findings aren't discarded, they're injected into both agents' system prompts as pre-verified, citable evidence. Of the four subjective categories left, the **Structural agent** judges information hierarchy and CTA cadence (whole-document, paragraph-ordering reasoning) and can only call `create_inline_comment` — no rewrite tool — since those issues call for reorganizing, not replacing, text. The **Line-Editor agent** judges tone drift and readability (local, sentence-level rewrites) and can only call `create_suggestion` — no comment tool. Restricting each agent to one tool turns what used to be a soft per-category tool *preference* into a hard constraint neither agent can violate. `agent.py`'s `run_agent()` dispatches the two on a `ThreadPoolExecutor` (each with its own `OpenRouterClient` instance) and merges their results with `orchestrator.reconcile_findings`; `docs_client.py`'s write methods hold their own lock, since both specialists can end up writing to the same document from separate threads at once. Exception handling is fail-fast — if either specialist's thread raises, that exception propagates immediately and the other's result is discarded rather than partially reconciled. The original single-prompt, single-loop implementation is kept as `run_agent_legacy` for comparison. Full rationale: [`MULTI_AGENT_PLAN.md`](MULTI_AGENT_PLAN.md).
 
 ### Design notes
 

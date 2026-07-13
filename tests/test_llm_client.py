@@ -203,3 +203,25 @@ class TestCompleteChat:
 
         with pytest.raises(LLMClientError):
             client.complete_chat(messages=[], tools=[])
+
+
+class TestNewInstance:
+    """Tests for OpenRouterClient.new_instance."""
+
+    def test_builds_a_distinct_client_with_the_same_credentials(
+        self, mocker: MockerFixture
+    ) -> None:
+        """A second, independent client is built from the same credentials."""
+        mock_openai = mocker.patch("verbatim.llm_client.OpenAI")
+        client = OpenRouterClient(
+            api_key="sk-test", model="some/model", base_url="https://example.test"
+        )
+
+        second = client.new_instance()
+
+        assert second is not client
+        assert second._model == client._model
+        assert mock_openai.call_args_list == [
+            mocker.call(api_key="sk-test", base_url="https://example.test"),
+            mocker.call(api_key="sk-test", base_url="https://example.test"),
+        ]

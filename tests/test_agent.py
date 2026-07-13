@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -13,8 +14,9 @@ from verbatim.docs_client import (
 )
 from verbatim.llm_client import ChatCompletionResult, OpenRouterClient, ToolCall
 from verbatim.orchestrator import _run_single_agent_loop
+from verbatim.prompts.line_editor import LINE_EDITOR_CATEGORIES
 from verbatim.prompts.shared import CATEGORIES
-from verbatim.prompts.structural import STRUCTURAL_TOOL_SCHEMAS
+from verbatim.prompts.structural import STRUCTURAL_CATEGORIES, STRUCTURAL_TOOL_SCHEMAS
 
 _DOCUMENT = DocumentContent(
     document_id="doc-id",
@@ -799,16 +801,29 @@ class TestRunAgentSpecialistDispatch:
         brand_guidelines: BrandGuidelines,
         mocker: MockerFixture,
     ) -> None:
-        """Both specialist agents run, in order, and their results are merged."""
+        """Both specialist agents run concurrently and their results are merged.
+
+        Dispatch happens on separate threads (Phase 2), so submission order
+        doesn't guarantee call order for these near-instant mocks -- assert
+        by each call's ``allowed_categories`` rather than list position.
+        """
         structural_result = AgentRunResult(
             suggestions_made=0, comments_made=1, transcript=[]
         )
         line_editor_result = AgentRunResult(
             suggestions_made=1, comments_made=0, transcript=[]
         )
+
+        def fake_run_single_agent_loop(
+            **kwargs: Any,
+        ) -> AgentRunResult:
+            if kwargs["allowed_categories"] == STRUCTURAL_CATEGORIES:
+                return structural_result
+            return line_editor_result
+
         mock_loop = mocker.patch(
             "verbatim.orchestrator._run_single_agent_loop",
-            side_effect=[structural_result, line_editor_result],
+            side_effect=fake_run_single_agent_loop,
         )
         merged_result = AgentRunResult(
             suggestions_made=1, comments_made=1, transcript=[]
@@ -827,13 +842,18 @@ class TestRunAgentSpecialistDispatch:
 
         assert result is merged_result
         assert mock_loop.call_count == 2
-        structural_kwargs = mock_loop.call_args_list[0].kwargs
-        line_editor_kwargs = mock_loop.call_args_list[1].kwargs
-        assert structural_kwargs["allowed_categories"] == [
-            "information_hierarchy",
-            "cta_cadence",
-        ]
-        assert line_editor_kwargs["allowed_categories"] == ["tone_drift", "readability"]
+        all_kwargs = [call.kwargs for call in mock_loop.call_args_list]
+        structural_kwargs = next(
+            kw for kw in all_kwargs if kw["allowed_categories"] == STRUCTURAL_CATEGORIES
+        )
+        line_editor_kwargs = next(
+            kw
+            for kw in all_kwargs
+            if kw["allowed_categories"] == LINE_EDITOR_CATEGORIES
+        )
+        assert structural_kwargs["llm_client"] is llm_client
+        assert line_editor_kwargs["llm_client"] is llm_client.new_instance.return_value
+        llm_client.new_instance.assert_called_once()
         mock_reconcile.assert_called_once_with(structural_result, line_editor_result)
 
     def test_fetches_document_and_campaign_exactly_once(
@@ -901,8 +921,16 @@ class TestRunAgentLineEditorResilience:
         llm_client.complete_chat.side_effect = [
             _tool_call_result(comment_call),  # Structural round 1: one comment
             _no_tool_calls_result(),  # Structural round 2: done
-            _no_tool_calls_result(),  # Line-Editor round 1: nothing at all
         ]
+        # Line-Editor runs concurrently on its own OpenRouterClient instance
+        # (agent.py's run_agent calls llm_client.new_instance() for it), not
+        # the shared mock above -- its "nothing at all" response has to be
+        # configured on that instance, or the default MagicMock stub's
+        # truthy .tool_calls never breaks the loop and it spins to the round
+        # cap instead.
+        llm_client.new_instance.return_value.complete_chat.return_value = (
+            _no_tool_calls_result()
+        )
 
         result = run_agent(
             docs_client=docs_client,
