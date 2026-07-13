@@ -141,6 +141,7 @@ class TestAuditEndpoint:
                     "detail": "CTA appears before any value proposition.",
                 },
             ],
+            "specialist_errors": {},
         }
         mock_docs_client.assert_called_once_with("fake-token", include_drive=True)
         mock_llm_client.assert_called_once_with(model="custom/model")
@@ -192,6 +193,34 @@ class TestAuditEndpoint:
             brand_guidelines=mock_brand_guidelines.return_value,
             target_channel=None,
         )
+
+    def test_audit_reports_partial_result_specialist_errors(
+        self,
+        client: TestClient,
+        mock_run_agent: MagicMock,
+        mock_docs_client: MagicMock,
+        mock_llm_client: MagicMock,
+        mock_brand_guidelines: MagicMock,
+    ) -> None:
+        """A partial result (#63) round-trips its specialist_errors as JSON."""
+        mock_run_agent.return_value = AgentRunResult(
+            suggestions_made=1,
+            comments_made=0,
+            transcript=[],
+            stopped_due_to_max_rounds=False,
+            specialist_errors={"structural": "structural boom"},
+        )
+
+        response = client.post(
+            "/audit",
+            json={"document_id": "doc-id", "brief_id": "brief-id"},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        job_id = response.json()["job_id"]
+
+        final = _poll_until_terminal(client, job_id)
+        assert final["status"] == "done"
+        assert final["result"]["specialist_errors"] == {"structural": "structural boom"}
 
     def test_audit_missing_authorization_header(self, client: TestClient) -> None:
         """A request with no Authorization header is rejected before the agent runs."""

@@ -39,19 +39,19 @@ Christina's exploration of `shared.py` while starting her `structural.py` work s
 
 ### Tue Jul 14 — Eval Card validation, split by agent ownership
 
-- [ ] **Christina**: run golden/edge/adversarial fixtures (+ `presentation/demo/*`) against the Structural agent (Info Hierarchy + CTA Cadence); fix anything found in `prompts/structural.py`.
-- [ ] **Karl**: same for the Line-Editor agent (Tone Drift + Readability) in `prompts/line_editor.py`.
-- [ ] **Both**: end-of-day sync — go/no-go call on flipping `run_agent()`'s default to the new split.
+- [ ] **Christina**: run golden/edge/adversarial fixtures (+ `presentation/demo/*`) against the Structural agent (Info Hierarchy + CTA Cadence); fix anything found in `prompts/structural.py`. *(in progress — PR #64, `fix/structural-prompt-category-clarity`)*
+- [x] **Karl**: same for the Line-Editor agent (Tone Drift + Readability) in `prompts/line_editor.py`. *(#61)*
+- [x] **Both**: end-of-day sync — go/no-go call on flipping `run_agent()`'s default to the new split. *(flipped — `run_agent()` dispatches the Structural/Line-Editor split by default)*
 
 ### Wed Jul 15
 
-- [ ] **Karl**: Phase 2 concurrency — `ThreadPoolExecutor` dispatch, `docs_client.py` write lock, two independent `OpenRouterClient` instances, concurrency test.
+- [x] **Karl**: Phase 2 concurrency — `ThreadPoolExecutor` dispatch, `docs_client.py` write lock, two independent `OpenRouterClient` instances, concurrency test. *(#62, plus follow-up fix for a fail-fast result-discarding bug — PR #66, open)*
 - [ ] **Christina**: unassigned/TBD. Her originally-planned task here (the `formatting_and_style` title/sentence-case check, [#11](https://github.com/hirekarl/verbatim/issues/11)) already shipped in PR #40 on Jul 9, before this sprint plan was written — caught during PR #46 review. Revisit after Tue Jul 14's Eval Card sync, once there's real signal on what needs work.
 
 ### Thu Jul 16 — buffer/polish, feature-complete
 
-- [ ] **Karl**: full regression (`pytest`, `ruff`, `mypy`, `--cov-fail-under=90`).
-- [ ] **Karl**: merge `multi-agent-plan` into `main`.
+- [x] **Karl**: full regression (`pytest`, `ruff`, `mypy`, `--cov-fail-under=90`). *(279 passed, 93.82% coverage, ruff/mypy clean — Jul 13)*
+- [x] **Karl**: merge `multi-agent-plan` into `main`. *(#46)*
 - [ ] **Christina**: CHANGELOG/README updates for the new architecture.
 - [ ] **Christina**: final coverage pass on `tests/test_prompts_structural.py`.
 
