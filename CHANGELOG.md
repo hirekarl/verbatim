@@ -1,3 +1,9 @@
+## v0.12.2 (2026-07-13)
+
+### Fix
+
+- **addon**: whitelist Cloud Run's newer hash-based backend URL (#60)
+
 ## v0.12.1 (2026-07-13)
 
 ### Fix
