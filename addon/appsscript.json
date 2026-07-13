@@ -8,7 +8,8 @@
     "https://www.googleapis.com/auth/script.external_request"
   ],
   "urlFetchWhitelist": [
-    "https://verbatim-backend-75857425003.us-east4.run.app/"
+    "https://verbatim-backend-75857425003.us-east4.run.app/",
+    "https://verbatim-backend-4iub5rucnq-uk.a.run.app/"
   ],
   "addOns": {
     "common": {

@@ -45,12 +45,15 @@ Per `docs/workspace-addon-migration.md` §4, the recommended auth model has Apps
 
 ## `urlFetchWhitelist`
 
-Per Google's docs (<https://developers.google.com/apps-script/manifest/allowlist-url>), restricts which hosts `UrlFetchApp.fetch()` (see `concept-urlfetchapp.md`) is allowed to call — `oauthScopes`' `script.external_request` alone is not enough. Not yet verified live via an actual `clasp push` + deploy (unlike the `addOns.docs` nesting above); update this note once that's confirmed.
+**Verified live** via `clasp push` + `clasp deploy` while fixing #59: adding the entries below let a versioned deployment succeed where it previously failed with "the URL has not been whitelisted in the script manifest."
+
+Per Google's docs (<https://developers.google.com/apps-script/manifest/allowlist-url>), restricts which hosts `UrlFetchApp.fetch()` (see `concept-urlfetchapp.md`) is allowed to call — `oauthScopes`' `script.external_request` alone is not enough.
 
 - Each entry is an HTTPS URL **prefix**: must start with `https://`, have a full domain, and a non-empty path (`https://host.com/` is valid, `https://host.com` is not).
 - Prefix matching covers child paths, query strings, and fragments — `https://host.com/foo` matches `https://host.com/foo/bar`, so a single trailing-slash entry for a backend's base URL covers all of its routes.
-- A single **leading** wildcard is allowed for subdomains (`https://*.example.com/foo`); more than one wildcard, or one not in leading position, is rejected when the manifest is saved.
+- A single **leading** wildcard is allowed for subdomains (`https://*.example.com/foo`); more than one wildcard, or one not in leading position, is rejected when the manifest is saved. Deliberately not used here even though `https://*.run.app/` would cover both URLs below with no future edits — it would also whitelist every other tenant's Cloud Run service on the shared `run.app` domain, not just this project's, so `Backend.gs`'s hardcoded-to-`BACKEND_URL` fetch stops being meaningfully scoped by the manifest.
 - **Optional for Test deployments, required for versioned deployments** — this is why a manifest missing `urlFetchWhitelist` can pass local `Deploy → Test deployments` runs and still fail the first time someone creates an actual versioned deployment. Keep it in sync with whatever `BACKEND_URL` Script Property the Add-on is pointed at (`addon/README.md`).
+- **A single Cloud Run service can have two permanent URLs simultaneously**, confirmed via `gcloud run services describe --format=json`'s `metadata.annotations["run.googleapis.com/urls"]`: a legacy `SERVICE-PROJECTNUMBER.REGION.run.app` form and a newer hash-based `SERVICE-HASH-REGIONCODE.a.run.app` form (the latter is what `status.url` reports as canonical). Both resolve to the same service and are stable — this isn't per-revision churn, so it doesn't recur on every `gcloud run deploy` — but whoever copies `BACKEND_URL` from the console/CLI output may get either form, so both need whitelisting.
 
 ## `addOns.docs`
 
