@@ -1,0 +1,7 @@
+It has been noticed by our systems that your account is getting close to its storage limit.
+
+Some kind of action may need to be taken by you at some point, or things could potentially stop working as expected in a general sense.
+
+Upgrade your plan.
+
+The free tier is capped at 2GB, which was decided as a reasonable starting point when the product was first built. Paid plans start at 100GB for $9/month, and existing files and settings are automatically carried over by our migration process — nothing needs to be done manually by you.

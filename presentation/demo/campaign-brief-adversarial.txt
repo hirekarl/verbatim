@@ -1,0 +1,9 @@
+Campaign Brief: Storage Limit Increase Announcement
+
+Channel: Blog
+Audience: Free-tier users approaching their storage cap
+Goal: Get free-tier users to upgrade to a paid plan before hitting the storage limit
+Key message: Free tier storage caps at 2GB; paid plans start at 100GB for $9/month
+Primary CTA: Upgrade your plan
+Tone: Plain, helpful, one CTA placed after the limit and pricing are explained
+Must avoid: Passive, vague phrasing that obscures who is responsible for what; asking for the upgrade before the limit is explained

@@ -1,0 +1,7 @@
+Log in and try the new onboarding today.
+
+We've heard from a lot of you that the old signup flow took too long, and honestly, you were right. Nine separate steps was too many, and half of them didn't need to exist.
+
+The entire flow was redesigned by our product team to cut it down to three steps: connect your workspace, invite your team, and set your first project. Most people are done in under two minutes now.
+
+That's it — no more juggling nine setup screens before you can actually use the product.
