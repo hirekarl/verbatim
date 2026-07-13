@@ -1,3 +1,9 @@
+## v0.14.2 (2026-07-13)
+
+### Fix
+
+- **structural**: clarify category distinction and reduce fragmentation (#64)
+
 ## v0.14.1 (2026-07-13)
 
 ### Fix
