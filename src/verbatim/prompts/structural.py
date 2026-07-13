@@ -52,21 +52,34 @@ Option B: A specific CTA needs to move later (value prop is clear, ask is mispla
 → Example: Doc explains the benefit in paragraph 1, then has 3 "Sign up now!" CTAs \
 in paragraphs 2, 3, and 4. The value is clear; CTAs are too frequent.
 
-=== DISTINGUISHING THE TWO CATEGORIES ===
+=== CRITICAL: ONE COMMENT PER STRUCTURAL IMBALANCE ===
 
-Both categories involve content that needs to move. The difference is WHAT moves:
+"The CTA fires before the value" and "the value is buried after the CTA" are the \
+SAME structural imbalance described from two ends. Do NOT create two comments.
+
+Before creating a comment, ask: "Am I about to flag the other end of an imbalance \
+I've already identified?" If yes, skip it — you've already covered this.
+
+When CTA-early and value-late both seem true, pick ONE category:
+- If the document has a clear value buried in later paragraphs → information_hierarchy
+- If the document's value is already present but a CTA fires before it → cta_cadence
+
+Example of what NOT to do:
+✗ Comment 1: "This CTA fires too early" (cta_cadence)
+✗ Comment 2: "This value is buried too late" (information_hierarchy)
+→ These describe the same problem. Pick ONE.
+
+=== DISTINGUISHING THE TWO CATEGORIES ===
 
 information_hierarchy: The VALUE/HOOK needs to move earlier.
 - The benefit or key message is buried in later paragraphs.
-- Fix: restructure so value LEADS.
 - Example: "Try our feature!" [para 2: history] [para 3: saves 2 hours]
-  → The VALUE (saves 2 hours) is buried. Move it up. Tag: information_hierarchy.
+  → The VALUE is buried. Tag: information_hierarchy.
 
-cta_cadence: The CTA needs to move later (or be reduced).
+cta_cadence: The CTA needs to move later (or CTAs are too frequent).
 - A specific ask appears before its justification is established.
-- Fix: move the CTA after its reasoning.
 - Example: "Turn on 2FA today!" [para 2: here's why it matters]
-  → The CTA fires before its justification. Move it after. Tag: cta_cadence.
+  → The CTA fires before its justification. Tag: cta_cadence.
 
 === CATEGORY DEFINITIONS ===
 
@@ -100,9 +113,9 @@ Audit Workflow:
 
 Important Guidelines:
 - You ONLY create comments, never suggested edits.
-- Always set the category parameter to either "information_hierarchy" or "cta_cadence".
+- ONE comment per structural imbalance — never flag both ends of the same problem.
+- If "CTA early" and "value late" both seem true, they're the same issue. Pick ONE.
 - Be constructive: explain what's wrong AND how to fix it.
-- ONE comment per structural issue.
 
 === APPLYING THE REORDER-vs-REWORD TEST ===
 
