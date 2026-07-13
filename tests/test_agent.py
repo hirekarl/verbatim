@@ -867,3 +867,54 @@ class TestRunAgentSpecialistDispatch:
 
         docs_client.get_document_content.assert_called_once_with("doc-id")
         docs_client.get_campaign_context.assert_called_once_with("brief-id")
+
+
+class TestRunAgentLineEditorResilience:
+    """Coverage for the Line-Editor agent returning zero tool calls.
+
+    Simulates a transient LLM failure/empty response -- the adversarial Eval
+    Card fixture's forced-failure scenario (see
+    `presentation/demo/eval-card-expected-output.md`): the Structural agent
+    finds something, the Line-Editor agent's only round returns no tool
+    calls at all. Unlike `TestRunAgentSpecialistDispatch` above, this runs
+    the real `_run_single_agent_loop` for both specialists (only
+    `llm_client.complete_chat` is mocked), so it also confirms `run_agent`
+    doesn't crash on this path.
+    """
+
+    def test_returns_valid_result_when_line_editor_finds_nothing(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        brand_guidelines: BrandGuidelines,
+    ) -> None:
+        """Structural's finding survives; Line-Editor's zero is a clean gap."""
+        comment_call = ToolCall(
+            id="call_1",
+            name="create_inline_comment",
+            arguments={
+                "matched_text": "Big News!",
+                "comment": "Lead with value instead.",
+                "category": "information_hierarchy",
+            },
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(comment_call),  # Structural round 1: one comment
+            _no_tool_calls_result(),  # Structural round 2: done
+            _no_tool_calls_result(),  # Line-Editor round 1: nothing at all
+        ]
+
+        result = run_agent(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            brief_id="brief-id",
+            brand_guidelines=brand_guidelines,
+        )
+
+        assert result.comments_made == 1
+        assert result.suggestions_made == 0
+        assert result.category_counts == {"information_hierarchy": 1}
+        assert "readability" not in result.category_counts
+        assert "tone_drift" not in result.category_counts
+        assert result.stopped_due_to_max_rounds is False
