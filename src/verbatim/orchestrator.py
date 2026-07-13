@@ -181,6 +181,43 @@ def _run_single_agent_loop(
     )
 
 
+def _spans_overlap(a: str, b: str) -> bool:
+    """True if one matched_text span is a substring of the other (or equal)."""
+    return a in b or b in a
+
+
+def _find_cross_agent_overlaps(
+    structural_findings: list[Finding], line_editor_findings: list[Finding]
+) -> list[tuple[Finding, Finding]]:
+    """Pair up Structural/Line-Editor findings whose matched_text spans overlap.
+
+    Flags, doesn't resolve: see #58, where both specialists independently
+    flagged the same three-word CTA with contradictory advice (relocate vs.
+    reword in place). There's no way to know which finding should "win"
+    without a reconciliation/critic agent -- deferred per
+    `MULTI_AGENT_PLAN.md`'s "Why this split" pending more data than one
+    adversarial-fixture occurrence. This just surfaces the overlap so a
+    copywriter isn't handed silently-contradictory advice, and so future
+    Eval Card runs have real data on how often it happens.
+
+    Args:
+        structural_findings: The Structural agent's findings.
+        line_editor_findings: The Line-Editor agent's findings.
+
+    Returns:
+        (structural_finding, line_editor_finding) pairs whose matched_text
+        spans overlap, in structural-findings order.
+    """
+    return [
+        (structural_finding, line_editor_finding)
+        for structural_finding in structural_findings
+        for line_editor_finding in line_editor_findings
+        if _spans_overlap(
+            structural_finding.matched_text, line_editor_finding.matched_text
+        )
+    ]
+
+
 def reconcile_findings(
     structural: AgentRunResult, line_editor: AgentRunResult
 ) -> AgentRunResult:
@@ -195,6 +232,10 @@ def reconcile_findings(
     function -- re-checking here would be validating data that can't be
     invalid by construction. See `MULTI_AGENT_PLAN.md`'s "Category
     validation" section.
+
+    Cross-agent *content* overlap (both agents flagging the same or
+    overlapping text) is a separate, real possibility this function does
+    detect -- see ``_find_cross_agent_overlaps``.
 
     Args:
         structural: The Structural agent's (Info Hierarchy + CTA Cadence) run
@@ -219,4 +260,7 @@ def reconcile_findings(
         ),
         category_counts=category_counts,
         findings=structural.findings + line_editor.findings,
+        cross_agent_overlaps=_find_cross_agent_overlaps(
+            structural.findings, line_editor.findings
+        ),
     )

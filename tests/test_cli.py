@@ -140,6 +140,67 @@ class TestCLI:
         assert "Big News!" in captured.out
         assert "Lead with value instead." in captured.out
 
+    def test_cli_prints_cross_agent_overlaps_when_present(
+        self,
+        mock_run_agent: MagicMock,
+        mock_docs_client: MagicMock,
+        mock_llm_client: MagicMock,
+        mock_brand_guidelines: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Overlapping Structural/Line-Editor findings are flagged, not resolved."""
+        structural_finding = Finding(
+            category="cta_cadence",
+            kind="comment",
+            matched_text="Upgrade your plan.",
+            detail="This CTA is premature.",
+        )
+        line_editor_finding = Finding(
+            category="tone_drift",
+            kind="suggestion",
+            matched_text="Upgrade your plan.",
+            detail="Soften the abrupt command.",
+        )
+        fake_result = AgentRunResult(
+            suggestions_made=1,
+            comments_made=1,
+            transcript=[],
+            stopped_due_to_max_rounds=False,
+            findings=[structural_finding, line_editor_finding],
+            cross_agent_overlaps=[(structural_finding, line_editor_finding)],
+        )
+        mock_run_agent.return_value = fake_result
+
+        main(["doc-id", "brief-id"])
+
+        captured = capsys.readouterr()
+        assert "Cross-agent overlaps" in captured.out
+        assert "Upgrade your plan." in captured.out
+        assert "cta_cadence" in captured.out
+        assert "tone_drift" in captured.out
+
+    def test_cli_omits_cross_agent_overlaps_section_when_none_found(
+        self,
+        mock_run_agent: MagicMock,
+        mock_docs_client: MagicMock,
+        mock_llm_client: MagicMock,
+        mock_brand_guidelines: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """No overlap noise in the common case where nothing overlapped."""
+        fake_result = AgentRunResult(
+            suggestions_made=1,
+            comments_made=0,
+            transcript=[],
+            stopped_due_to_max_rounds=False,
+        )
+        mock_run_agent.return_value = fake_result
+
+        main(["doc-id", "brief-id"])
+
+        captured = capsys.readouterr()
+        assert "Cross-agent overlaps" not in captured.out
+
     def test_cli_success_defaults(
         self,
         mock_run_agent: MagicMock,
