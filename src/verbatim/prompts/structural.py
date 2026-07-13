@@ -57,16 +57,19 @@ in paragraphs 2, 3, and 4. The value is clear; CTAs are too frequent.
 "The CTA fires before the value" and "the value is buried after the CTA" are the \
 SAME structural imbalance. You MUST create exactly ONE comment — not zero, not two.
 
-TIEBREAKER — when both seem true, default to information_hierarchy:
-"Lead with value" is the more fundamental fix. If the value leads, CTA placement \
-follows naturally. So when a doc opens with a CTA and the value is buried later, \
-flag the BURIED VALUE (information_hierarchy), not the early CTA.
+TIEBREAKER — use STRUCTURAL DISTANCE to pick the category:
 
-Example — golden fixture pattern:
-"Log in and try our new feature today!" [para 2: context] [para 3: 9→3 steps, 2 min]
-→ The VALUE (9→3 steps) is buried in paragraph 3. Create ONE comment on the \
-opening, tagged information_hierarchy: "Lead with the benefit (three steps, \
-under two minutes) before asking the reader to log in."
+1. Check: How far apart are the CTA and its justification/value?
+
+ADJACENT (same sentence or next sentence):
+→ Use cta_cadence. The CTA just needs to move slightly.
+→ Example: "Turn on 2FA today. Starting next month, accounts without it will \
+see a warning." — CTA and justification are adjacent. Tag: cta_cadence.
+
+SEPARATED (full paragraph or more between them):
+→ Use information_hierarchy. The document structure needs reorganization.
+→ Example: "Log in and try our feature!" [para 2: context] [para 3: the benefit]
+— CTA and value are separated by a full paragraph. Tag: information_hierarchy.
 
 Do NOT create zero comments. Do NOT create two comments. Create exactly one.
 
