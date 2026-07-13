@@ -1,3 +1,9 @@
+## v0.13.0 (2026-07-13)
+
+### Feat
+
+- **orchestrator**: flag cross-agent span overlaps, don't resolve them (#65)
+
 ## v0.12.3 (2026-07-13)
 
 ### Fix

@@ -47,6 +47,7 @@ class AgentRunResult:
     stopped_due_to_max_rounds: bool = False
     category_counts: dict[str, int] = field(default_factory=dict)
     findings: list[Finding] = field(default_factory=list)
+    cross_agent_overlaps: list[tuple[Finding, Finding]] = field(default_factory=list)
 
 
 def _find_anchor_text(body_text: str) -> str | None:
