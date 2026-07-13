@@ -1,7 +1,7 @@
 """Entrypoints for auditing a Google Doc: the multi-agent split and its legacy path."""
 
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from verbatim.brand_guidelines import BrandGuidelines
@@ -39,7 +39,15 @@ class Finding:
 
 @dataclass(frozen=True)
 class AgentRunResult:
-    """The outcome of one single-pass audit run."""
+    """The outcome of one single-pass audit run.
+
+    ``specialist_errors`` is only ever non-empty on the result of a
+    multi-agent ``run_agent()`` call where exactly one of the two specialists'
+    threads raised -- see #63. It maps the failed specialist's name
+    (``"structural"`` or ``"line_editor"``) to that exception's message; the
+    rest of the fields report the *other*, successfully-completed
+    specialist's real output, since its writes are already live in the doc.
+    """
 
     suggestions_made: int
     comments_made: int
@@ -48,6 +56,7 @@ class AgentRunResult:
     category_counts: dict[str, int] = field(default_factory=dict)
     findings: list[Finding] = field(default_factory=list)
     cross_agent_overlaps: list[tuple[Finding, Finding]] = field(default_factory=list)
+    specialist_errors: dict[str, str] = field(default_factory=dict)
 
 
 def _find_anchor_text(body_text: str) -> str | None:
@@ -156,11 +165,16 @@ def run_agent(
     Readability, suggestion-only) concurrently on separate threads -- Phase
     2's dispatch per `MULTI_AGENT_PLAN.md`. Each specialist gets its own
     ``OpenRouterClient`` instance; ``docs_client``'s write methods hold their
-    own lock, so it's safe to share across both. If either specialist's
-    thread raises, that exception propagates immediately and the other's
-    result is discarded without reconciling -- fail-fast, matching Phase 1's
-    existing implicit behavior (a Structural failure already prevented
-    Line-Editor from ever running).
+    own lock, so it's safe to share across both.
+
+    Both futures are always awaited, so one specialist's exception can never
+    discard the other's already-live doc writes (see #63): if exactly one
+    thread raises, this returns that surviving specialist's real
+    ``AgentRunResult`` with the failure recorded in ``specialist_errors``
+    rather than reconciling (there's nothing to reconcile with). Only if
+    *both* threads raise -- nothing was reconciled and nothing partial to
+    report -- does this propagate, as a single ``RuntimeError`` summarizing
+    both failures.
 
     Args:
         docs_client: An authenticated GoogleDocsClient with write access.
@@ -217,10 +231,34 @@ def run_agent(
             allowed_categories=LINE_EDITOR_CATEGORIES,
             max_tool_call_rounds=max_tool_call_rounds,
         )
-        structural_result = structural_future.result()
-        line_editor_result = line_editor_future.result()
+        specialist_errors: dict[str, str] = {}
 
-    return reconcile_findings(structural_result, line_editor_result)
+        try:
+            structural_result: AgentRunResult | None = structural_future.result()
+        except Exception as err:
+            structural_result = None
+            specialist_errors["structural"] = str(err)
+
+        try:
+            line_editor_result: AgentRunResult | None = line_editor_future.result()
+        except Exception as err:
+            line_editor_result = None
+            specialist_errors["line_editor"] = str(err)
+
+    if not specialist_errors:
+        assert structural_result is not None
+        assert line_editor_result is not None
+        return reconcile_findings(structural_result, line_editor_result)
+
+    if structural_result is None and line_editor_result is None:
+        raise RuntimeError(
+            "Both specialist agents failed: "
+            + "; ".join(f"{name}: {msg}" for name, msg in specialist_errors.items())
+        )
+
+    partial_result = structural_result or line_editor_result
+    assert partial_result is not None
+    return replace(partial_result, specialist_errors=specialist_errors)
 
 
 def run_agent_legacy(
