@@ -1,3 +1,9 @@
+## v0.14.0 (2026-07-13)
+
+### Feat
+
+- **agent**: dispatch specialist agents concurrently (Phase 2) (#62)
+
 ## v0.13.0 (2026-07-13)
 
 ### Feat
