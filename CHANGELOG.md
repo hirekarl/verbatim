@@ -1,3 +1,9 @@
+## v0.12.3 (2026-07-13)
+
+### Fix
+
+- **prompts**: stop tone_drift and readability false positives in Line-Editor (#61)
+
 ## v0.12.2 (2026-07-13)
 
 ### Fix
