@@ -32,10 +32,10 @@ Christina's exploration of `shared.py` while starting her `structural.py` work s
 
 ### Mon Jul 13 (Karl back)
 
-- [ ] Implement `prompts/line_editor.py` and `orchestrator.py` Phase 1 (sequential dispatch + `reconcile_findings`).
-- [ ] Wire `_run_single_agent_loop`'s `allowed_categories` param (`STRUCTURAL_CATEGORIES`/`LINE_EDITOR_CATEGORIES`) through `validate_category` at both specialist call sites — contract locked Sun Jul 12.
-- [ ] Retarget `tests/test_agent.py`'s dispatch/dedup/error-handling tests onto `_run_single_agent_loop`.
-- [ ] Wire `run_agent()` to the new split behind `run_agent_legacy`.
+- [x] Implement `prompts/line_editor.py` and `orchestrator.py` Phase 1 (sequential dispatch + `reconcile_findings`).
+- [x] Wire `_run_single_agent_loop`'s `allowed_categories` param (`STRUCTURAL_CATEGORIES`/`LINE_EDITOR_CATEGORIES`) through `validate_category` at both specialist call sites — contract locked Sun Jul 12.
+- [x] Retarget `tests/test_agent.py`'s dispatch/dedup/error-handling tests onto `_run_single_agent_loop`.
+- [x] Wire `run_agent()` to the new split behind `run_agent_legacy`.
 
 ### Tue Jul 14 — Eval Card validation, split by agent ownership
 
