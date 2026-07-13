@@ -1,5 +1,6 @@
 """Google Docs API client: auth plus read-side document/campaign-brief tools."""
 
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -375,6 +376,7 @@ class GoogleDocsClient:
         self._service = service
         self._drive_service = drive_service
         self._doc_cache: dict[str, dict[str, Any]] = {}
+        self._write_lock = threading.Lock()
 
     def _get_cached_document(self, document_id: str) -> dict[str, Any]:
         """Fetch a document, retrieving from cache if present.
@@ -555,67 +557,68 @@ class GoogleDocsClient:
             AmbiguousMatchError: ``matched_text`` appears more than once.
             DocsClientError: The document fetch or batch update failed.
         """
-        document = self._get_cached_document(document_id)
-        start, end = _locate_document_range(document, matched_text)
+        with self._write_lock:
+            document = self._get_cached_document(document_id)
+            start, end = _locate_document_range(document, matched_text)
 
-        if self._drive_service is not None and self._can_edit_directly(document_id):
-            requests: list[dict[str, Any]] = [
-                {
-                    "updateTextStyle": {
-                        "range": {"startIndex": start, "endIndex": end},
-                        "textStyle": {"strikethrough": True},
-                        "fields": "strikethrough",
-                    }
-                }
-            ]
-            if replacement_text:
-                insertion_length = _utf16_length(replacement_text)
-                requests.append(
-                    {
-                        "insertText": {
-                            "location": {"index": end},
-                            "text": replacement_text,
-                        }
-                    }
-                )
-                requests.append(
+            if self._drive_service is not None and self._can_edit_directly(document_id):
+                requests: list[dict[str, Any]] = [
                     {
                         "updateTextStyle": {
-                            "range": {
-                                "startIndex": end,
-                                "endIndex": end + insertion_length,
-                            },
-                            "textStyle": {
-                                "bold": True,
-                                "strikethrough": False,
-                                "foregroundColor": _REPLACEMENT_TEXT_COLOR,
-                            },
-                            "fields": "bold,strikethrough,foregroundColor",
+                            "range": {"startIndex": start, "endIndex": end},
+                            "textStyle": {"strikethrough": True},
+                            "fields": "strikethrough",
                         }
                     }
-                )
-        else:
-            requests = [
-                {
-                    "deleteContentRange": {
-                        "range": {"startIndex": start, "endIndex": end}
-                    }
-                },
-                {
-                    "insertText": {
-                        "location": {"index": start},
-                        "text": replacement_text,
-                    }
-                },
-            ]
+                ]
+                if replacement_text:
+                    insertion_length = _utf16_length(replacement_text)
+                    requests.append(
+                        {
+                            "insertText": {
+                                "location": {"index": end},
+                                "text": replacement_text,
+                            }
+                        }
+                    )
+                    requests.append(
+                        {
+                            "updateTextStyle": {
+                                "range": {
+                                    "startIndex": end,
+                                    "endIndex": end + insertion_length,
+                                },
+                                "textStyle": {
+                                    "bold": True,
+                                    "strikethrough": False,
+                                    "foregroundColor": _REPLACEMENT_TEXT_COLOR,
+                                },
+                                "fields": "bold,strikethrough,foregroundColor",
+                            }
+                        }
+                    )
+            else:
+                requests = [
+                    {
+                        "deleteContentRange": {
+                            "range": {"startIndex": start, "endIndex": end}
+                        }
+                    },
+                    {
+                        "insertText": {
+                            "location": {"index": start},
+                            "text": replacement_text,
+                        }
+                    },
+                ]
 
-        _execute_batch_update(
-            self._service,
-            document_id,
-            requests,
-            f"Failed to create suggestion in document: {document_id}",
-        )
-        self.clear_cache(document_id)
+            _execute_batch_update(
+                self._service,
+                document_id,
+                requests,
+                f"Failed to create suggestion in document: {document_id}",
+            )
+            self.clear_cache(document_id)
 
     def create_inline_comment(
         self, document_id: str, matched_text: str, comment: str
@@ -649,36 +652,37 @@ class GoogleDocsClient:
                 "GoogleDocsClient with drive_service or "
                 "from_local_credentials(include_drive=True)."
             )
-        document = self._get_cached_document(document_id)
-        start, end = _locate_document_range(document, matched_text)
-        body = {"content": f'Re: "{matched_text}"\n\n{comment}'}
-        try:
-            self._drive_service.comments().create(
-                fileId=document_id, body=body, fields="id"
-            ).execute()
-        except HttpError as err:
-            raise DocsClientError(
-                f"Failed to create comment on document: {document_id}"
-            ) from err
+        with self._write_lock:
+            document = self._get_cached_document(document_id)
+            start, end = _locate_document_range(document, matched_text)
+            body = {"content": f'Re: "{matched_text}"\n\n{comment}'}
+            try:
+                self._drive_service.comments().create(
+                    fileId=document_id, body=body, fields="id"
+                ).execute()
+            except HttpError as err:
+                raise DocsClientError(
+                    f"Failed to create comment on document: {document_id}"
+                ) from err
 
-        if self._can_edit_directly(document_id):
-            _execute_batch_update(
-                self._service,
-                document_id,
-                [
-                    {
-                        "updateTextStyle": {
-                            "range": {"startIndex": start, "endIndex": end},
-                            "textStyle": {
-                                "backgroundColor": _HIGHLIGHT_BACKGROUND_COLOR
-                            },
-                            "fields": "backgroundColor",
+            if self._can_edit_directly(document_id):
+                _execute_batch_update(
+                    self._service,
+                    document_id,
+                    [
+                        {
+                            "updateTextStyle": {
+                                "range": {"startIndex": start, "endIndex": end},
+                                "textStyle": {
+                                    "backgroundColor": _HIGHLIGHT_BACKGROUND_COLOR
+                                },
+                                "fields": "backgroundColor",
+                            }
                         }
-                    }
-                ],
-                f"Failed to highlight matched text in document: {document_id}",
-            )
-            self.clear_cache(document_id)
+                    ],
+                    f"Failed to highlight matched text in document: {document_id}",
+                )
+                self.clear_cache(document_id)
 
     def list_comments(self, document_id: str) -> list[dict[str, Any]]:
         """List comments on a Google Drive file.

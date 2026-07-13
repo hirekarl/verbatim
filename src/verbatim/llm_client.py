@@ -51,6 +51,8 @@ class OpenRouterClient:
             base_url: The OpenAI-compatible API base URL. Defaults to
                 OpenRouter's endpoint.
         """
+        self._api_key = api_key
+        self._base_url = base_url
         self._client = OpenAI(api_key=api_key, base_url=base_url)
         self._model = model
 
@@ -78,6 +80,17 @@ class OpenRouterClient:
                 "OPENROUTER_API_KEY environment variable is not set"
             )
         return cls(api_key=api_key, model=model)
+
+    def new_instance(self) -> "OpenRouterClient":
+        """Build a second, independent client sharing this one's credentials.
+
+        Phase 2 concurrent dispatch runs the Structural and Line-Editor
+        specialist agents on separate threads; each gets its own SDK client
+        object rather than sharing one across threads.
+        """
+        return OpenRouterClient(
+            api_key=self._api_key, model=self._model, base_url=self._base_url
+        )
 
     def complete_chat(
         self,

@@ -1,5 +1,6 @@
 """Entrypoints for auditing a Google Doc: the multi-agent split and its legacy path."""
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -146,18 +147,25 @@ def run_agent(
     target_channel: str | None = None,
     max_tool_call_rounds: int = 20,
 ) -> AgentRunResult:
-    """Run one audit as two sequential specialist agents, then reconcile.
+    """Run one audit as two concurrent specialist agents, then reconcile.
 
     Fetches the document, campaign brief, and brand guidelines exactly once,
-    then runs the Structural agent (Information Hierarchy + CTA Cadence,
-    comment-only) followed by the Line-Editor agent (Tone Drift +
-    Readability, suggestion-only) -- Phase 1's sequential dispatch per
-    `MULTI_AGENT_PLAN.md`. Their results are merged by
-    ``orchestrator.reconcile_findings``.
+    then dispatches the Structural agent (Information Hierarchy + CTA
+    Cadence, comment-only) and the Line-Editor agent (Tone Drift +
+    Readability, suggestion-only) concurrently on separate threads -- Phase
+    2's dispatch per `MULTI_AGENT_PLAN.md`. Each specialist gets its own
+    ``OpenRouterClient`` instance; ``docs_client``'s write methods hold their
+    own lock, so it's safe to share across both. If either specialist's
+    thread raises, that exception propagates immediately and the other's
+    result is discarded without reconciling -- fail-fast, matching Phase 1's
+    existing implicit behavior (a Structural failure already prevented
+    Line-Editor from ever running).
 
     Args:
         docs_client: An authenticated GoogleDocsClient with write access.
-        llm_client: An OpenRouterClient to run both audit conversations on.
+        llm_client: An OpenRouterClient to run the Structural agent's
+            conversation on; the Line-Editor agent gets its own via
+            ``llm_client.new_instance()``.
         document_id: The Google Docs document ID to audit.
         brief_id: The Google Docs document ID of the campaign brief.
         brand_guidelines: The brand guidelines to inject into both prompts.
@@ -180,30 +188,36 @@ def run_agent(
     line_editor_prompt = build_line_editor_system_prompt(
         guidelines_block, document, campaign, violations=violations
     )
+    line_editor_llm_client = llm_client.new_instance()
 
     # Deferred import: orchestrator.py imports Finding/AgentRunResult from
     # this module at load time, so importing it back at module level here
     # would be circular.
     from verbatim.orchestrator import _run_single_agent_loop, reconcile_findings
 
-    structural_result = _run_single_agent_loop(
-        docs_client=docs_client,
-        llm_client=llm_client,
-        document_id=document_id,
-        system_prompt=structural_prompt,
-        tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
-        allowed_categories=STRUCTURAL_CATEGORIES,
-        max_tool_call_rounds=max_tool_call_rounds,
-    )
-    line_editor_result = _run_single_agent_loop(
-        docs_client=docs_client,
-        llm_client=llm_client,
-        document_id=document_id,
-        system_prompt=line_editor_prompt,
-        tool_schemas=LINE_EDITOR_TOOL_SCHEMAS,
-        allowed_categories=LINE_EDITOR_CATEGORIES,
-        max_tool_call_rounds=max_tool_call_rounds,
-    )
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        structural_future = executor.submit(
+            _run_single_agent_loop,
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id=document_id,
+            system_prompt=structural_prompt,
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=STRUCTURAL_CATEGORIES,
+            max_tool_call_rounds=max_tool_call_rounds,
+        )
+        line_editor_future = executor.submit(
+            _run_single_agent_loop,
+            docs_client=docs_client,
+            llm_client=line_editor_llm_client,
+            document_id=document_id,
+            system_prompt=line_editor_prompt,
+            tool_schemas=LINE_EDITOR_TOOL_SCHEMAS,
+            allowed_categories=LINE_EDITOR_CATEGORIES,
+            max_tool_call_rounds=max_tool_call_rounds,
+        )
+        structural_result = structural_future.result()
+        line_editor_result = line_editor_future.result()
 
     return reconcile_findings(structural_result, line_editor_result)
 

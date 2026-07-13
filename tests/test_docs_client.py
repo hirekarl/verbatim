@@ -1,5 +1,7 @@
 """Tests for the Google Docs API client module."""
 
+import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -1006,6 +1008,57 @@ class TestGoogleDocsClientCreateInlineComment:
 
         with pytest.raises(DocsClientError):
             client.create_inline_comment("doc-id", "feature", "Consider rephrasing.")
+
+
+class TestGoogleDocsClientConcurrentWrites:
+    """Tests that GoogleDocsClient serializes concurrent writes with a lock."""
+
+    @pytest.fixture
+    def fake_service(self) -> MagicMock:
+        """A fake Docs API discovery service returning a fixed document."""
+        service = MagicMock()
+        service.documents.return_value.get.return_value.execute.return_value = (
+            _FAKE_DOCUMENT_WITH_INDICES
+        )
+        return service
+
+    @pytest.fixture
+    def client(self, fake_service: MagicMock) -> GoogleDocsClient:
+        """A GoogleDocsClient wired to the fake service."""
+        return GoogleDocsClient(service=fake_service)
+
+    def test_concurrent_create_suggestion_calls_do_not_overlap(
+        self, client: GoogleDocsClient, fake_service: MagicMock
+    ) -> None:
+        """Two threads writing to the same document never race inside a write call."""
+        in_critical_section = threading.Event()
+        overlap_detected = threading.Event()
+
+        def instrumented_execute(*args: object, **kwargs: object) -> dict[str, object]:
+            if in_critical_section.is_set():
+                overlap_detected.set()
+            in_critical_section.set()
+            time.sleep(0.05)
+            in_critical_section.clear()
+            return {}
+
+        batch_update = fake_service.documents.return_value.batchUpdate
+        batch_update.return_value.execute.side_effect = instrumented_execute
+
+        threads = [
+            threading.Thread(
+                target=client.create_suggestion,
+                args=("doc-id", "feature", f"capability-{i}"),
+            )
+            for i in range(5)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=5)
+            assert not thread.is_alive()
+
+        assert not overlap_detected.is_set()
 
 
 class TestGoogleDocsClientFromLocalCredentials:
