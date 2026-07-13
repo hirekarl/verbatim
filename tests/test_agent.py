@@ -921,8 +921,16 @@ class TestRunAgentLineEditorResilience:
         llm_client.complete_chat.side_effect = [
             _tool_call_result(comment_call),  # Structural round 1: one comment
             _no_tool_calls_result(),  # Structural round 2: done
-            _no_tool_calls_result(),  # Line-Editor round 1: nothing at all
         ]
+        # Line-Editor runs concurrently on its own OpenRouterClient instance
+        # (agent.py's run_agent calls llm_client.new_instance() for it), not
+        # the shared mock above -- its "nothing at all" response has to be
+        # configured on that instance, or the default MagicMock stub's
+        # truthy .tool_calls never breaks the loop and it spins to the round
+        # cap instead.
+        llm_client.new_instance.return_value.complete_chat.return_value = (
+            _no_tool_calls_result()
+        )
 
         result = run_agent(
             docs_client=docs_client,
