@@ -246,3 +246,7 @@ addon/.clasp.json
 ### Verbatim: generated presentation deck (regenerate via presentation/build_deck.py) ###
 presentation/*.pptx
 presentation/~$*.pptx
+
+### Verbatim: PRD template downloads, not project deliverables (never commit) ###
+docs/20260515 PRD Template.docx
+docs/20260515 PRD Template (1).docx

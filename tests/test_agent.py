@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 from pytest_mock import MockerFixture
 
-from verbatim.agent import AgentRunResult, Finding, run_agent
+from verbatim.agent import AgentRunResult, Finding, run_agent, run_agent_legacy
 from verbatim.brand_guidelines import BrandGuidelines
 from verbatim.docs_client import (
     CampaignContext,
@@ -12,6 +12,9 @@ from verbatim.docs_client import (
     TextNotFoundError,
 )
 from verbatim.llm_client import ChatCompletionResult, OpenRouterClient, ToolCall
+from verbatim.orchestrator import _run_single_agent_loop
+from verbatim.prompts.shared import CATEGORIES
+from verbatim.prompts.structural import STRUCTURAL_TOOL_SCHEMAS
 
 _DOCUMENT = DocumentContent(
     document_id="doc-id",
@@ -61,8 +64,583 @@ def _tool_call_result(*tool_calls: ToolCall) -> ChatCompletionResult:
     )
 
 
-class TestRunAgent:
-    """Tests for run_agent's single-pass tool-calling conversation."""
+class TestRunSingleAgentLoop:
+    """Tests for orchestrator._run_single_agent_loop's tool-calling conversation.
+
+    Retargeted Mon Jul 13 from run_agent's inline loop (now extracted into
+    this shared, per-specialist function) per `TODO.md`. Uses the legacy
+    `TOOL_SCHEMAS`/`CATEGORIES` since these behaviors (dispatch, dedup,
+    error-handling, loop-control) are generic to the loop itself, not
+    specific to either specialist agent.
+    """
+
+    def test_stops_immediately_when_the_model_makes_no_tool_calls(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """A content-only first response ends the run with nothing posted."""
+        llm_client.complete_chat.return_value = _no_tool_calls_result()
+
+        result = _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=CATEGORIES,
+        )
+
+        assert result == AgentRunResult(
+            suggestions_made=0,
+            comments_made=0,
+            transcript=result.transcript,
+            stopped_due_to_max_rounds=False,
+        )
+        llm_client.complete_chat.assert_called_once()
+
+    def test_dispatches_a_single_create_suggestion_call_then_stops(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """A single suggestion tool call is dispatched and counted."""
+        suggestion_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            arguments={
+                "matched_text": "Feature",
+                "replacement_text": "Capability",
+                "rationale": "Simplify the noun.",
+                "category": "readability",
+            },
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(suggestion_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=CATEGORIES,
+        )
+
+        docs_client.create_suggestion.assert_called_once_with(
+            document_id="doc-id",
+            matched_text="Feature",
+            replacement_text="Capability",
+        )
+        assert result.suggestions_made == 1
+        assert result.comments_made == 0
+        assert result.category_counts == {"readability": 1}
+        assert result.findings == [
+            Finding(
+                category="readability",
+                kind="suggestion",
+                matched_text="Feature",
+                detail="Simplify the noun.",
+            )
+        ]
+
+    def test_skips_redundant_suggestion_when_matched_and_replacement_are_identical(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """A redundant suggestion tool call is skipped and not counted."""
+        suggestion_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            arguments={"matched_text": "Same text", "replacement_text": "Same text"},
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(suggestion_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=CATEGORIES,
+        )
+
+        docs_client.create_suggestion.assert_not_called()
+        assert result.suggestions_made == 0
+        assert result.comments_made == 0
+        assert result.findings == []
+
+    def test_dispatches_a_single_create_inline_comment_call_then_stops(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """A single comment tool call is dispatched and counted."""
+        comment_call = ToolCall(
+            id="call_1",
+            name="create_inline_comment",
+            arguments={
+                "matched_text": "Big News!",
+                "comment": "Lead with value instead.",
+                "category": "information_hierarchy",
+            },
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(comment_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=CATEGORIES,
+        )
+
+        docs_client.create_inline_comment.assert_called_once_with(
+            document_id="doc-id",
+            matched_text="Big News!",
+            comment="Lead with value instead.",
+        )
+        assert result.suggestions_made == 0
+        assert result.comments_made == 1
+        assert result.category_counts == {"information_hierarchy": 1}
+        assert result.findings == [
+            Finding(
+                category="information_hierarchy",
+                kind="comment",
+                matched_text="Big News!",
+                detail="Lead with value instead.",
+            )
+        ]
+
+    def test_dispatches_multiple_tool_calls_returned_in_one_round(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """Several tool calls in one model response are all dispatched."""
+        suggestion_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            arguments={
+                "matched_text": "Feature",
+                "replacement_text": "Capability",
+                "rationale": "Simplify the noun.",
+                "category": "readability",
+            },
+        )
+        comment_call = ToolCall(
+            id="call_2",
+            name="create_inline_comment",
+            arguments={
+                "matched_text": "Big News!",
+                "comment": "Reorder this.",
+                "category": "information_hierarchy",
+            },
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(suggestion_call, comment_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=CATEGORIES,
+        )
+
+        assert result.suggestions_made == 1
+        assert result.comments_made == 1
+        assert result.category_counts == {
+            "readability": 1,
+            "information_hierarchy": 1,
+        }
+        assert result.findings == [
+            Finding(
+                category="readability",
+                kind="suggestion",
+                matched_text="Feature",
+                detail="Simplify the noun.",
+            ),
+            Finding(
+                category="information_hierarchy",
+                kind="comment",
+                matched_text="Big News!",
+                detail="Reorder this.",
+            ),
+        ]
+
+    def test_missing_category_falls_back_to_uncategorized(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """A tool call omitting category still counts, under 'uncategorized'.
+
+        The model isn't guaranteed to honor the schema's `required` list --
+        OpenRouter/OpenAI-style function calling doesn't hard-enforce it --
+        so a dispatched call missing `category` shouldn't crash or vanish
+        from the tally."""
+        suggestion_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            arguments={"matched_text": "Feature", "replacement_text": "Capability"},
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(suggestion_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=CATEGORIES,
+        )
+
+        assert result.suggestions_made == 1
+        assert result.category_counts == {"uncategorized": 1}
+        assert result.findings == [
+            Finding(
+                category="uncategorized",
+                kind="suggestion",
+                matched_text="Feature",
+                detail="",
+            )
+        ]
+
+    def test_unrecognized_category_falls_back_to_uncategorized(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """A tool call with an out-of-vocabulary category still counts, under
+        'uncategorized' -- not as a new, silent category_counts key.
+
+        Same reasoning as the missing-category fallback above, but for the
+        case where the model *does* type a category, just not one of the
+        caller's ``allowed_categories`` (a typo like 'info_hierarchy', wrong
+        casing, or a real category borrowed from the wrong specialist
+        agent -- see the narrower-``allowed_categories`` tests below)."""
+        suggestion_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            arguments={
+                "matched_text": "Feature",
+                "replacement_text": "Capability",
+                "category": "info_hierarchy",
+            },
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(suggestion_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=CATEGORIES,
+        )
+
+        assert result.suggestions_made == 1
+        assert result.category_counts == {"uncategorized": 1}
+        assert result.findings == [
+            Finding(
+                category="uncategorized",
+                kind="suggestion",
+                matched_text="Feature",
+                detail="",
+            )
+        ]
+
+    def test_category_from_the_other_specialist_agent_falls_back_to_uncategorized(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """A real category outside this call's narrower allowed_categories
+        is caught too, not just outright typos -- the scenario
+        `allowed_categories` exists for once the specialist split lands."""
+        suggestion_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            arguments={
+                "matched_text": "Feature",
+                "replacement_text": "Capability",
+                "category": "information_hierarchy",
+            },
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(suggestion_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=["tone_drift", "readability"],
+        )
+
+        assert result.category_counts == {"uncategorized": 1}
+
+    def test_missing_rationale_falls_back_to_empty_detail(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """A suggestion tool call omitting rationale still creates a Finding.
+
+        Same reasoning as the missing-category fallback above: the model
+        isn't guaranteed to honor the schema's `required` list."""
+        suggestion_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            arguments={
+                "matched_text": "Feature",
+                "replacement_text": "Capability",
+                "category": "readability",
+            },
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(suggestion_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=CATEGORIES,
+        )
+
+        assert result.findings == [
+            Finding(
+                category="readability",
+                kind="suggestion",
+                matched_text="Feature",
+                detail="",
+            )
+        ]
+
+    def test_skips_duplicate_inline_comment_on_same_matched_text_across_rounds(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """A repeat create_inline_comment on the same span in a later round is
+        skipped rather than posted again -- the model re-flagging the same
+        structural issue during both its overall-structure pass and its
+        paragraph-by-paragraph pass shouldn't duplicate the comment."""
+        first_call = ToolCall(
+            id="call_1",
+            name="create_inline_comment",
+            arguments={"matched_text": "Big News!", "comment": "Reorder this."},
+        )
+        second_call = ToolCall(
+            id="call_2",
+            name="create_inline_comment",
+            arguments={
+                "matched_text": "Big News!",
+                "comment": "Lead with value instead.",
+            },
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(first_call),
+            _tool_call_result(second_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=CATEGORIES,
+        )
+
+        docs_client.create_inline_comment.assert_called_once_with(
+            document_id="doc-id",
+            matched_text="Big News!",
+            comment="Reorder this.",
+        )
+        assert result.comments_made == 1
+        assert len(result.findings) == 1
+
+    def test_skips_duplicate_suggestion_on_same_matched_text_across_rounds(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """A repeat create_suggestion on the same span in a later round is
+        skipped rather than posted again."""
+        first_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            arguments={"matched_text": "Feature", "replacement_text": "Capability"},
+        )
+        second_call = ToolCall(
+            id="call_2",
+            name="create_suggestion",
+            arguments={"matched_text": "Feature", "replacement_text": "Tool"},
+        )
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(first_call),
+            _tool_call_result(second_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=CATEGORIES,
+        )
+
+        docs_client.create_suggestion.assert_called_once_with(
+            document_id="doc-id",
+            matched_text="Feature",
+            replacement_text="Capability",
+        )
+        assert result.suggestions_made == 1
+        assert len(result.findings) == 1
+
+    def test_docs_client_error_is_fed_back_as_a_tool_result_not_raised(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """A DocsClientError from dispatch surfaces to the model, not the caller."""
+        suggestion_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            arguments={
+                "matched_text": "nowhere",
+                "replacement_text": "x",
+                "category": "readability",
+            },
+        )
+        docs_client.create_suggestion.side_effect = TextNotFoundError("not found")
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(suggestion_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=CATEGORIES,
+        )
+
+        assert result.suggestions_made == 0
+        assert result.category_counts == {}
+        assert result.findings == []
+        second_call_messages = llm_client.complete_chat.call_args_list[1].kwargs[
+            "messages"
+        ]
+        tool_messages = [m for m in second_call_messages if m.get("role") == "tool"]
+        assert any("not found" in m["content"] for m in tool_messages)
+
+    def test_unknown_tool_name_is_surfaced_to_the_model_without_crashing(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """A tool call for an unrecognized tool name doesn't raise or dispatch."""
+        unknown_call = ToolCall(id="call_1", name="delete_document", arguments={})
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(unknown_call),
+            _no_tool_calls_result(),
+        ]
+
+        result = _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=CATEGORIES,
+        )
+
+        assert result.suggestions_made == 0
+        assert result.comments_made == 0
+        docs_client.create_suggestion.assert_not_called()
+        docs_client.create_inline_comment.assert_not_called()
+
+    def test_stops_after_max_rounds_when_the_model_never_stops_calling_tools(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """A non-terminating conversation is capped by max_tool_call_rounds."""
+        # Distinct matched_text per round -- a repeated identical tool call
+        # would be collapsed by duplicate-span skipping, confounding this
+        # test's assertion that the round cap itself is what stops the loop.
+        llm_client.complete_chat.side_effect = [
+            _tool_call_result(
+                ToolCall(
+                    id=f"call_{i}",
+                    name="create_suggestion",
+                    arguments={
+                        "matched_text": f"Feature {i}",
+                        "replacement_text": f"Capability {i}",
+                    },
+                )
+            )
+            for i in range(3)
+        ]
+
+        result = _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=CATEGORIES,
+            max_tool_call_rounds=3,
+        )
+
+        assert result.stopped_due_to_max_rounds is True
+        assert llm_client.complete_chat.call_count == 3
+        assert result.suggestions_made == 3
+
+
+class TestRunAgentLegacy:
+    """Tests for run_agent_legacy's single-pass tool-calling conversation.
+
+    Renamed Mon Jul 13 from `TestRunAgent` -- these orchestration-level
+    behaviors (fetch once, run the evaluator once, fall back gracefully on
+    invalid guidelines) live on the pre-split legacy path now, kept for the
+    Tue Jul 14 before/after Eval Card comparison. Dispatch/dedup/error-
+    handling behaviors moved to `TestRunSingleAgentLoop` above.
+    """
 
     def test_stops_immediately_when_the_model_makes_no_tool_calls(
         self,
@@ -73,7 +651,7 @@ class TestRunAgent:
         """A content-only first response ends the run with nothing posted."""
         llm_client.complete_chat.return_value = _no_tool_calls_result()
 
-        result = run_agent(
+        result = run_agent_legacy(
             docs_client=docs_client,
             llm_client=llm_client,
             document_id="doc-id",
@@ -98,7 +676,7 @@ class TestRunAgent:
         """Reads happen once up front, regardless of how many tool-call rounds run."""
         llm_client.complete_chat.return_value = _no_tool_calls_result()
 
-        run_agent(
+        run_agent_legacy(
             docs_client=docs_client,
             llm_client=llm_client,
             document_id="doc-id",
@@ -127,7 +705,7 @@ class TestRunAgent:
 
         llm_client.complete_chat.return_value = _no_tool_calls_result()
 
-        run_agent(
+        run_agent_legacy(
             docs_client=docs_client,
             llm_client=llm_client,
             document_id="doc-id",
@@ -152,458 +730,6 @@ class TestRunAgent:
             violations=fake_violations,
         )
 
-    def test_dispatches_a_single_create_suggestion_call_then_stops(
-        self,
-        docs_client: MagicMock,
-        llm_client: MagicMock,
-        brand_guidelines: BrandGuidelines,
-    ) -> None:
-        """A single suggestion tool call is dispatched and counted."""
-        suggestion_call = ToolCall(
-            id="call_1",
-            name="create_suggestion",
-            arguments={
-                "matched_text": "Feature",
-                "replacement_text": "Capability",
-                "rationale": "Simplify the noun.",
-                "category": "readability",
-            },
-        )
-        llm_client.complete_chat.side_effect = [
-            _tool_call_result(suggestion_call),
-            _no_tool_calls_result(),
-        ]
-
-        result = run_agent(
-            docs_client=docs_client,
-            llm_client=llm_client,
-            document_id="doc-id",
-            brief_id="brief-id",
-            brand_guidelines=brand_guidelines,
-        )
-
-        docs_client.create_suggestion.assert_called_once_with(
-            document_id="doc-id",
-            matched_text="Feature",
-            replacement_text="Capability",
-        )
-        assert result.suggestions_made == 1
-        assert result.comments_made == 0
-        assert result.category_counts == {"readability": 1}
-        assert result.findings == [
-            Finding(
-                category="readability",
-                kind="suggestion",
-                matched_text="Feature",
-                detail="Simplify the noun.",
-            )
-        ]
-
-    def test_skips_redundant_suggestion_when_matched_and_replacement_are_identical(
-        self,
-        docs_client: MagicMock,
-        llm_client: MagicMock,
-        brand_guidelines: BrandGuidelines,
-    ) -> None:
-        """A redundant suggestion tool call is skipped and not counted."""
-        suggestion_call = ToolCall(
-            id="call_1",
-            name="create_suggestion",
-            arguments={"matched_text": "Same text", "replacement_text": "Same text"},
-        )
-        llm_client.complete_chat.side_effect = [
-            _tool_call_result(suggestion_call),
-            _no_tool_calls_result(),
-        ]
-
-        result = run_agent(
-            docs_client=docs_client,
-            llm_client=llm_client,
-            document_id="doc-id",
-            brief_id="brief-id",
-            brand_guidelines=brand_guidelines,
-        )
-
-        docs_client.create_suggestion.assert_not_called()
-        assert result.suggestions_made == 0
-        assert result.comments_made == 0
-        assert result.findings == []
-
-    def test_dispatches_a_single_create_inline_comment_call_then_stops(
-        self,
-        docs_client: MagicMock,
-        llm_client: MagicMock,
-        brand_guidelines: BrandGuidelines,
-    ) -> None:
-        """A single comment tool call is dispatched and counted."""
-        comment_call = ToolCall(
-            id="call_1",
-            name="create_inline_comment",
-            arguments={
-                "matched_text": "Big News!",
-                "comment": "Lead with value instead.",
-                "category": "information_hierarchy",
-            },
-        )
-        llm_client.complete_chat.side_effect = [
-            _tool_call_result(comment_call),
-            _no_tool_calls_result(),
-        ]
-
-        result = run_agent(
-            docs_client=docs_client,
-            llm_client=llm_client,
-            document_id="doc-id",
-            brief_id="brief-id",
-            brand_guidelines=brand_guidelines,
-        )
-
-        docs_client.create_inline_comment.assert_called_once_with(
-            document_id="doc-id",
-            matched_text="Big News!",
-            comment="Lead with value instead.",
-        )
-        assert result.suggestions_made == 0
-        assert result.comments_made == 1
-        assert result.category_counts == {"information_hierarchy": 1}
-        assert result.findings == [
-            Finding(
-                category="information_hierarchy",
-                kind="comment",
-                matched_text="Big News!",
-                detail="Lead with value instead.",
-            )
-        ]
-
-    def test_dispatches_multiple_tool_calls_returned_in_one_round(
-        self,
-        docs_client: MagicMock,
-        llm_client: MagicMock,
-        brand_guidelines: BrandGuidelines,
-    ) -> None:
-        """Several tool calls in one model response are all dispatched."""
-        suggestion_call = ToolCall(
-            id="call_1",
-            name="create_suggestion",
-            arguments={
-                "matched_text": "Feature",
-                "replacement_text": "Capability",
-                "rationale": "Simplify the noun.",
-                "category": "readability",
-            },
-        )
-        comment_call = ToolCall(
-            id="call_2",
-            name="create_inline_comment",
-            arguments={
-                "matched_text": "Big News!",
-                "comment": "Reorder this.",
-                "category": "information_hierarchy",
-            },
-        )
-        llm_client.complete_chat.side_effect = [
-            _tool_call_result(suggestion_call, comment_call),
-            _no_tool_calls_result(),
-        ]
-
-        result = run_agent(
-            docs_client=docs_client,
-            llm_client=llm_client,
-            document_id="doc-id",
-            brief_id="brief-id",
-            brand_guidelines=brand_guidelines,
-        )
-
-        assert result.suggestions_made == 1
-        assert result.comments_made == 1
-        assert result.category_counts == {
-            "readability": 1,
-            "information_hierarchy": 1,
-        }
-        assert result.findings == [
-            Finding(
-                category="readability",
-                kind="suggestion",
-                matched_text="Feature",
-                detail="Simplify the noun.",
-            ),
-            Finding(
-                category="information_hierarchy",
-                kind="comment",
-                matched_text="Big News!",
-                detail="Reorder this.",
-            ),
-        ]
-
-    def test_missing_category_falls_back_to_uncategorized(
-        self,
-        docs_client: MagicMock,
-        llm_client: MagicMock,
-        brand_guidelines: BrandGuidelines,
-    ) -> None:
-        """A tool call omitting category still counts, under 'uncategorized'.
-
-        The model isn't guaranteed to honor the schema's `required` list --
-        OpenRouter/OpenAI-style function calling doesn't hard-enforce it --
-        so a dispatched call missing `category` shouldn't crash or vanish
-        from the tally."""
-        suggestion_call = ToolCall(
-            id="call_1",
-            name="create_suggestion",
-            arguments={"matched_text": "Feature", "replacement_text": "Capability"},
-        )
-        llm_client.complete_chat.side_effect = [
-            _tool_call_result(suggestion_call),
-            _no_tool_calls_result(),
-        ]
-
-        result = run_agent(
-            docs_client=docs_client,
-            llm_client=llm_client,
-            document_id="doc-id",
-            brief_id="brief-id",
-            brand_guidelines=brand_guidelines,
-        )
-
-        assert result.suggestions_made == 1
-        assert result.category_counts == {"uncategorized": 1}
-        assert result.findings == [
-            Finding(
-                category="uncategorized",
-                kind="suggestion",
-                matched_text="Feature",
-                detail="",
-            )
-        ]
-
-    def test_missing_rationale_falls_back_to_empty_detail(
-        self,
-        docs_client: MagicMock,
-        llm_client: MagicMock,
-        brand_guidelines: BrandGuidelines,
-    ) -> None:
-        """A suggestion tool call omitting rationale still creates a Finding.
-
-        Same reasoning as the missing-category fallback above: the model
-        isn't guaranteed to honor the schema's `required` list."""
-        suggestion_call = ToolCall(
-            id="call_1",
-            name="create_suggestion",
-            arguments={
-                "matched_text": "Feature",
-                "replacement_text": "Capability",
-                "category": "readability",
-            },
-        )
-        llm_client.complete_chat.side_effect = [
-            _tool_call_result(suggestion_call),
-            _no_tool_calls_result(),
-        ]
-
-        result = run_agent(
-            docs_client=docs_client,
-            llm_client=llm_client,
-            document_id="doc-id",
-            brief_id="brief-id",
-            brand_guidelines=brand_guidelines,
-        )
-
-        assert result.findings == [
-            Finding(
-                category="readability",
-                kind="suggestion",
-                matched_text="Feature",
-                detail="",
-            )
-        ]
-
-    def test_skips_duplicate_inline_comment_on_same_matched_text_across_rounds(
-        self,
-        docs_client: MagicMock,
-        llm_client: MagicMock,
-        brand_guidelines: BrandGuidelines,
-    ) -> None:
-        """A repeat create_inline_comment on the same span in a later round is
-        skipped rather than posted again -- the model re-flagging the same
-        structural issue during both its overall-structure pass and its
-        paragraph-by-paragraph pass shouldn't duplicate the comment."""
-        first_call = ToolCall(
-            id="call_1",
-            name="create_inline_comment",
-            arguments={"matched_text": "Big News!", "comment": "Reorder this."},
-        )
-        second_call = ToolCall(
-            id="call_2",
-            name="create_inline_comment",
-            arguments={
-                "matched_text": "Big News!",
-                "comment": "Lead with value instead.",
-            },
-        )
-        llm_client.complete_chat.side_effect = [
-            _tool_call_result(first_call),
-            _tool_call_result(second_call),
-            _no_tool_calls_result(),
-        ]
-
-        result = run_agent(
-            docs_client=docs_client,
-            llm_client=llm_client,
-            document_id="doc-id",
-            brief_id="brief-id",
-            brand_guidelines=brand_guidelines,
-        )
-
-        docs_client.create_inline_comment.assert_called_once_with(
-            document_id="doc-id",
-            matched_text="Big News!",
-            comment="Reorder this.",
-        )
-        assert result.comments_made == 1
-        assert len(result.findings) == 1
-
-    def test_skips_duplicate_suggestion_on_same_matched_text_across_rounds(
-        self,
-        docs_client: MagicMock,
-        llm_client: MagicMock,
-        brand_guidelines: BrandGuidelines,
-    ) -> None:
-        """A repeat create_suggestion on the same span in a later round is
-        skipped rather than posted again."""
-        first_call = ToolCall(
-            id="call_1",
-            name="create_suggestion",
-            arguments={"matched_text": "Feature", "replacement_text": "Capability"},
-        )
-        second_call = ToolCall(
-            id="call_2",
-            name="create_suggestion",
-            arguments={"matched_text": "Feature", "replacement_text": "Tool"},
-        )
-        llm_client.complete_chat.side_effect = [
-            _tool_call_result(first_call),
-            _tool_call_result(second_call),
-            _no_tool_calls_result(),
-        ]
-
-        result = run_agent(
-            docs_client=docs_client,
-            llm_client=llm_client,
-            document_id="doc-id",
-            brief_id="brief-id",
-            brand_guidelines=brand_guidelines,
-        )
-
-        docs_client.create_suggestion.assert_called_once_with(
-            document_id="doc-id",
-            matched_text="Feature",
-            replacement_text="Capability",
-        )
-        assert result.suggestions_made == 1
-        assert len(result.findings) == 1
-
-    def test_docs_client_error_is_fed_back_as_a_tool_result_not_raised(
-        self,
-        docs_client: MagicMock,
-        llm_client: MagicMock,
-        brand_guidelines: BrandGuidelines,
-    ) -> None:
-        """A DocsClientError from dispatch surfaces to the model, not the caller."""
-        suggestion_call = ToolCall(
-            id="call_1",
-            name="create_suggestion",
-            arguments={
-                "matched_text": "nowhere",
-                "replacement_text": "x",
-                "category": "readability",
-            },
-        )
-        docs_client.create_suggestion.side_effect = TextNotFoundError("not found")
-        llm_client.complete_chat.side_effect = [
-            _tool_call_result(suggestion_call),
-            _no_tool_calls_result(),
-        ]
-
-        result = run_agent(
-            docs_client=docs_client,
-            llm_client=llm_client,
-            document_id="doc-id",
-            brief_id="brief-id",
-            brand_guidelines=brand_guidelines,
-        )
-
-        assert result.suggestions_made == 0
-        assert result.category_counts == {}
-        assert result.findings == []
-        second_call_messages = llm_client.complete_chat.call_args_list[1].kwargs[
-            "messages"
-        ]
-        tool_messages = [m for m in second_call_messages if m.get("role") == "tool"]
-        assert any("not found" in m["content"] for m in tool_messages)
-
-    def test_unknown_tool_name_is_surfaced_to_the_model_without_crashing(
-        self,
-        docs_client: MagicMock,
-        llm_client: MagicMock,
-        brand_guidelines: BrandGuidelines,
-    ) -> None:
-        """A tool call for an unrecognized tool name doesn't raise or dispatch."""
-        unknown_call = ToolCall(id="call_1", name="delete_document", arguments={})
-        llm_client.complete_chat.side_effect = [
-            _tool_call_result(unknown_call),
-            _no_tool_calls_result(),
-        ]
-
-        result = run_agent(
-            docs_client=docs_client,
-            llm_client=llm_client,
-            document_id="doc-id",
-            brief_id="brief-id",
-            brand_guidelines=brand_guidelines,
-        )
-
-        assert result.suggestions_made == 0
-        assert result.comments_made == 0
-        docs_client.create_suggestion.assert_not_called()
-        docs_client.create_inline_comment.assert_not_called()
-
-    def test_stops_after_max_rounds_when_the_model_never_stops_calling_tools(
-        self,
-        docs_client: MagicMock,
-        llm_client: MagicMock,
-        brand_guidelines: BrandGuidelines,
-    ) -> None:
-        """A non-terminating conversation is capped by max_tool_call_rounds."""
-        # Distinct matched_text per round -- a repeated identical tool call
-        # would be collapsed by duplicate-span skipping, confounding this
-        # test's assertion that the round cap itself is what stops the loop.
-        llm_client.complete_chat.side_effect = [
-            _tool_call_result(
-                ToolCall(
-                    id=f"call_{i}",
-                    name="create_suggestion",
-                    arguments={
-                        "matched_text": f"Feature {i}",
-                        "replacement_text": f"Capability {i}",
-                    },
-                )
-            )
-            for i in range(3)
-        ]
-
-        result = run_agent(
-            docs_client=docs_client,
-            llm_client=llm_client,
-            document_id="doc-id",
-            brief_id="brief-id",
-            brand_guidelines=brand_guidelines,
-            max_tool_call_rounds=3,
-        )
-
-        assert result.stopped_due_to_max_rounds is True
-        assert llm_client.complete_chat.call_count == 3
-        assert result.suggestions_made == 3
-
     def test_handles_invalid_brand_guidelines_gracefully(
         self,
         docs_client: MagicMock,
@@ -623,7 +749,7 @@ class TestRunAgent:
 
         llm_client.complete_chat.return_value = _no_tool_calls_result()
 
-        result = run_agent(
+        result = run_agent_legacy(
             docs_client=docs_client,
             llm_client=llm_client,
             document_id="doc-id",
@@ -653,3 +779,91 @@ class TestRunAgent:
         kwargs = mock_build.call_args.kwargs
         assert "[WARNING] Brand voice and style guidelines are unavailable" in args[0]
         assert kwargs.get("violations") == []
+
+
+class TestRunAgentSpecialistDispatch:
+    """Tests for the new run_agent's wiring: both specialists, then reconcile.
+
+    Unlike `TestRunSingleAgentLoop`/`TestRunAgentLegacy` above, these mock
+    out `orchestrator._run_single_agent_loop` and
+    `orchestrator.reconcile_findings` entirely -- the goal here is only to
+    verify `run_agent` assembles and dispatches to both specialist agents
+    correctly, not to re-exercise the loop or merge logic those other test
+    classes already cover.
+    """
+
+    def test_calls_structural_then_line_editor_then_reconciles(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        brand_guidelines: BrandGuidelines,
+        mocker: MockerFixture,
+    ) -> None:
+        """Both specialist agents run, in order, and their results are merged."""
+        structural_result = AgentRunResult(
+            suggestions_made=0, comments_made=1, transcript=[]
+        )
+        line_editor_result = AgentRunResult(
+            suggestions_made=1, comments_made=0, transcript=[]
+        )
+        mock_loop = mocker.patch(
+            "verbatim.orchestrator._run_single_agent_loop",
+            side_effect=[structural_result, line_editor_result],
+        )
+        merged_result = AgentRunResult(
+            suggestions_made=1, comments_made=1, transcript=[]
+        )
+        mock_reconcile = mocker.patch(
+            "verbatim.orchestrator.reconcile_findings", return_value=merged_result
+        )
+
+        result = run_agent(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            brief_id="brief-id",
+            brand_guidelines=brand_guidelines,
+        )
+
+        assert result is merged_result
+        assert mock_loop.call_count == 2
+        structural_kwargs = mock_loop.call_args_list[0].kwargs
+        line_editor_kwargs = mock_loop.call_args_list[1].kwargs
+        assert structural_kwargs["allowed_categories"] == [
+            "information_hierarchy",
+            "cta_cadence",
+        ]
+        assert line_editor_kwargs["allowed_categories"] == ["tone_drift", "readability"]
+        mock_reconcile.assert_called_once_with(structural_result, line_editor_result)
+
+    def test_fetches_document_and_campaign_exactly_once(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        brand_guidelines: BrandGuidelines,
+        mocker: MockerFixture,
+    ) -> None:
+        """Reads happen once up front, shared by both specialist prompts."""
+        mocker.patch(
+            "verbatim.orchestrator._run_single_agent_loop",
+            return_value=AgentRunResult(
+                suggestions_made=0, comments_made=0, transcript=[]
+            ),
+        )
+        mocker.patch(
+            "verbatim.orchestrator.reconcile_findings",
+            return_value=AgentRunResult(
+                suggestions_made=0, comments_made=0, transcript=[]
+            ),
+        )
+
+        run_agent(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            brief_id="brief-id",
+            brand_guidelines=brand_guidelines,
+        )
+
+        docs_client.get_document_content.assert_called_once_with("doc-id")
+        docs_client.get_campaign_context.assert_called_once_with("brief-id")

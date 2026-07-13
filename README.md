@@ -1,6 +1,6 @@
 # Verbatim
 
-Verbatim is an AI agent that reviews draft marketing copy inside Google Docs against a brand's voice, style, and structural guidelines and a campaign brief. It runs on-demand when a copywriter starts a check, then flags mechanical issues — tone drift, information hierarchy, CTA cadence, readability, formatting/style, channel constraints, and banned words — as inline comments and suggested edits directly in the document.
+Verbatim is an AI agent that reviews draft marketing copy inside Google Docs against a brand's voice, style, and structural guidelines and a campaign brief. It runs on-demand when a copywriter starts a check, then flags issues across 7 categories — tone drift, information hierarchy, CTA cadence, readability, formatting/style, channel constraints, and banned words — as inline comments and suggested edits directly in the document.
 
 ## Table of contents
 
@@ -34,7 +34,7 @@ Verbatim is an AI agent that reviews draft marketing copy inside Google Docs aga
 
 ### How it works
 
-A copywriter kicks off a check from the command line against a draft document and its campaign brief. From there the run is fully automated: Verbatim reads both documents, runs its deterministic rule checks, hands everything to the LLM as context, and lets the model post suggestions/comments directly back into the doc. Nothing is written until the copywriter reviews it.
+A copywriter kicks off a check from the command line against a draft document and its campaign brief. From there the run is fully automated: Verbatim reads both documents once, runs its deterministic rule checks, then dispatches two specialist LLM agents in sequence — each restricted to its own narrow slice of categories and its own single tool — before a plain-Python orchestrator reconciles their output into one result. Nothing is written until the copywriter reviews it.
 
 ```mermaid
 flowchart TD
@@ -43,20 +43,20 @@ flowchart TD
     C --> D[Fetch draft document content]
     C --> E[Fetch campaign brief]
     D --> F["Deterministic evaluator:<br/>banned words, formatting/style, channel limits"]
-    F --> G["Assemble system prompt:<br/>guidelines + document + brief + evaluator violations"]
-    E --> G
-    G --> H{LLM tool-calling loop}
-    H -- "create_suggestion" --> I["POST suggested edit<br/>(Docs API batchUpdate)"]
-    H -- "create_inline_comment" --> J["POST inline comment<br/>(Drive API)"]
-    I --> H
-    J --> H
-    H -- "no more tool calls,<br/>or max rounds hit" --> K["Print run summary<br/>(suggestions/comments made)"]
+    E --> G["Orchestrator assembles both<br/>specialist system prompts"]
+    F --> G
+    G --> H{"Structural agent<br/>(information hierarchy, CTA cadence)"}
+    H -- "create_inline_comment" --> H
+    H -- "no more tool calls,<br/>or max rounds hit" --> I{"Line-Editor agent<br/>(tone drift, readability)"}
+    I -- "create_suggestion" --> I
+    I -- "no more tool calls,<br/>or max rounds hit" --> J[Orchestrator: reconcile_findings]
+    J --> K["Print run summary<br/>(suggestions/comments made)"]
     K --> L[Copywriter reviews suggestions & comments in Google Docs]
     L --> M[Accept / reject inline]
     M --> N[Draft goes on for strategic sign-off]
 ```
 
-The evaluator and the LLM cover different halves of the 7 audit categories: `BrandGuidelinesEvaluator` handles the mechanically-checkable ones (banned words, formatting/style mechanics, channel constraints) with plain regex, while the model handles the four requiring subjective judgment (tone drift, information hierarchy, CTA cadence, readability) — using the evaluator's findings as extra citable context rather than needing to reproduce them itself.
+The evaluator and the two specialist agents cover different slices of the 7 audit categories. `BrandGuidelinesEvaluator` handles the mechanically-checkable ones (banned words, formatting/style mechanics, channel constraints) with plain regex — its findings aren't discarded, they're injected into both agents' system prompts as pre-verified, citable evidence. Of the four subjective categories left, the **Structural agent** judges information hierarchy and CTA cadence (whole-document, paragraph-ordering reasoning) and can only call `create_inline_comment` — no rewrite tool — since those issues call for reorganizing, not replacing, text. The **Line-Editor agent** judges tone drift and readability (local, sentence-level rewrites) and can only call `create_suggestion` — no comment tool. Restricting each agent to one tool turns what used to be a soft per-category tool *preference* into a hard constraint neither agent can violate. `orchestrator.py` runs the two sequentially (Phase 1; concurrent dispatch is a planned Phase 2) and merges their results with `reconcile_findings`; the original single-prompt, single-loop implementation is kept as `run_agent_legacy` for comparison. Full rationale: [`MULTI_AGENT_PLAN.md`](MULTI_AGENT_PLAN.md).
 
 ### Design notes
 
@@ -79,7 +79,7 @@ See [`TODO.md`](TODO.md) for the active sprint plan — the current deadline, th
 Karl and Christina split ownership of the repo by domain, not by day-to-day task, so each of them can move fast without waiting on review of the other's in-flight work — the two stay in disjoint files at any given time:
 
 - **Christina** owns the deterministic rules/evaluator engine: `src/verbatim/evaluator.py`, `src/verbatim/brand_guidelines.py`, `src/verbatim/data/brand_guidelines.json`, and their tests. This covers the mechanically-checkable brand rules — banned words, formatting/style mechanics, channel character/sentence limits, standardized spellings.
-- **Karl** owns infrastructure/CI/tooling, the Google Docs/Drive API client (`src/verbatim/docs_client.py`), and the LLM agent loop and prompt assembly (`src/verbatim/agent.py`, `src/verbatim/prompt.py`, `src/verbatim/cli.py`).
+- **Karl** owns infrastructure/CI/tooling, the Google Docs/Drive API client (`src/verbatim/docs_client.py`), and the multi-agent orchestration and prompt assembly (`src/verbatim/agent.py`, `src/verbatim/orchestrator.py`, `src/verbatim/prompt.py`, `src/verbatim/prompts/`, `src/verbatim/cli.py`).
 
 This split isn't permanent. Christina's domain was chosen deliberately: it's self-contained and regex/pattern-based with a fast TDD feedback loop, which gives her genuine ownership of core product logic rather than docs/config busywork. She'll rotate into Docs API and agent-loop territory in small, reviewed slices as time allows, rather than all at once. See [`TODO.md`](TODO.md) for the current sprint's day-by-day split and file ownership map.
 
@@ -256,25 +256,34 @@ verbatim/
 ├── src/verbatim/           # the installable package
 │   ├── __init__.py
 │   ├── __main__.py         # runnable module entrypoint
-│   ├── agent.py            # single-pass tool-calling agent loop
+│   ├── agent.py            # run_agent (multi-agent split) + run_agent_legacy entrypoints
+│   ├── orchestrator.py     # per-specialist dispatch loop + reconcile_findings merge
 │   ├── brand_guidelines.py # loader for brand_guidelines.json
 │   ├── cli.py              # CLI entrypoint implementation
 │   ├── docs_client.py      # Google Docs/Drive API auth + read/write tool wrappers
 │   ├── evaluator.py        # BrandGuidelinesEvaluator: checks text against brand rules
 │   ├── http_api.py         # FastAPI HTTP entrypoint (hosted Workspace Add-on backend)
 │   ├── llm_client.py       # OpenRouter chat-completions client
-│   ├── prompt.py           # system prompt assembly + tool schemas
+│   ├── prompt.py           # legacy single-agent system prompt + tool schemas
+│   ├── prompts/            # per-specialist-agent prompt assembly + tool schemas
+│   │   ├── shared.py       # CATEGORIES, validate_category() -- shared by every agent
+│   │   ├── structural.py   # Structural agent: information hierarchy, CTA cadence
+│   │   └── line_editor.py  # Line-Editor agent: tone drift, readability
 │   ├── py.typed
 │   ├── token_validator.py  # validates inbound Add-on bearer tokens (tokeninfo)
 │   └── data/
 │       └── brand_guidelines.json  # brand voice/style rules (Mailchimp style guide synthesis)
 ├── tests/                  # pytest suite
 │   ├── test_agent.py
+│   ├── test_orchestrator.py
 │   ├── test_cli.py
 │   ├── test_docs_client.py
 │   ├── test_http_api.py
 │   ├── test_llm_client.py
 │   ├── test_prompt.py
+│   ├── test_prompts_shared.py
+│   ├── test_prompts_structural.py
+│   ├── test_prompts_line_editor.py
 │   └── test_token_validator.py
 ├── addon/                  # Editor Add-on source (Apps Script) -- see addon/README.md
 │   ├── appsscript.json     # manifest: runtime, oauthScopes, Docs Editor Add-on config

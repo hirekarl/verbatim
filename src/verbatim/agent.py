@@ -1,13 +1,24 @@
-"""Single-pass tool-calling agent loop for auditing a Google Doc."""
+"""Entrypoints for auditing a Google Doc: the multi-agent split and its legacy path."""
 
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from verbatim.brand_guidelines import BrandGuidelines
-from verbatim.docs_client import DocsClientError, GoogleDocsClient
-from verbatim.evaluator import BrandGuidelinesEvaluator
-from verbatim.llm_client import OpenRouterClient, ToolCall
+from verbatim.docs_client import CampaignContext, DocumentContent, GoogleDocsClient
+from verbatim.evaluator import BrandGuidelinesEvaluator, Violation
+from verbatim.llm_client import OpenRouterClient
 from verbatim.prompt import TOOL_SCHEMAS, build_system_prompt
+from verbatim.prompts.line_editor import (
+    LINE_EDITOR_CATEGORIES,
+    LINE_EDITOR_TOOL_SCHEMAS,
+    build_line_editor_system_prompt,
+)
+from verbatim.prompts.shared import CATEGORIES
+from verbatim.prompts.structural import (
+    STRUCTURAL_CATEGORIES,
+    STRUCTURAL_TOOL_SCHEMAS,
+    build_structural_system_prompt,
+)
 
 
 @dataclass(frozen=True)
@@ -59,35 +70,24 @@ def _find_anchor_text(body_text: str) -> str | None:
     return None
 
 
-def run_agent(
+def _fetch_shared_context(
     docs_client: GoogleDocsClient,
-    llm_client: OpenRouterClient,
     document_id: str,
     brief_id: str,
     brand_guidelines: BrandGuidelines,
-    target_channel: str | None = None,
-    max_tool_call_rounds: int = 20,
-) -> AgentRunResult:
-    """Run one single-pass audit conversation over a document.
+    target_channel: str | None,
+) -> tuple[DocumentContent, CampaignContext, str, list[Violation]]:
+    """Fetch the document/campaign and run the evaluator, exactly once.
 
-    Fetches the document, campaign brief, and brand guidelines exactly once,
-    then runs a tool-calling conversation until the model stops requesting
-    tools (or ``max_tool_call_rounds`` is exhausted, as a backstop against a
-    non-terminating conversation).
-
-    Args:
-        docs_client: An authenticated GoogleDocsClient with write access.
-        llm_client: An OpenRouterClient to run the audit conversation on.
-        document_id: The Google Docs document ID to audit.
-        brief_id: The Google Docs document ID of the campaign brief.
-        brand_guidelines: The brand guidelines to inject into the prompt.
-        target_channel: Optional channel (e.g. "email", "blog") to filter
-            channel-specific brand guidelines by.
-        max_tool_call_rounds: The maximum number of model round trips before
-            the run is stopped as a safety backstop.
+    Shared by ``run_agent_legacy``'s single system prompt and ``run_agent``'s
+    two specialist prompts -- both need the identical document, campaign,
+    guidelines block, and deterministic violations list, per
+    `MULTI_AGENT_PLAN.md`'s "Builds the shared context once" design.
 
     Returns:
-        The number of suggestions/comments posted and the full transcript.
+        The (possibly refreshed, if a guidelines-missing warning comment was
+        posted) document, the campaign context, the guidelines block to
+        embed in a system prompt, and the deterministic violations list.
     """
     document = docs_client.get_document_content(document_id)
     campaign = docs_client.get_campaign_context(brief_id)
@@ -119,7 +119,7 @@ def run_agent(
             "the guidelines file is missing or invalid. Evaluate the document "
             "against the Campaign Brief and common-sense copywriting rules only."
         )
-        violations = []
+        violations: list[Violation] = []
     else:
         guidelines_block = brand_guidelines.format_for_llm_prompt(
             target_channel=target_channel
@@ -134,133 +134,127 @@ def run_agent(
             title=document.title,
         )
 
+    return document, campaign, guidelines_block, violations
+
+
+def run_agent(
+    docs_client: GoogleDocsClient,
+    llm_client: OpenRouterClient,
+    document_id: str,
+    brief_id: str,
+    brand_guidelines: BrandGuidelines,
+    target_channel: str | None = None,
+    max_tool_call_rounds: int = 20,
+) -> AgentRunResult:
+    """Run one audit as two sequential specialist agents, then reconcile.
+
+    Fetches the document, campaign brief, and brand guidelines exactly once,
+    then runs the Structural agent (Information Hierarchy + CTA Cadence,
+    comment-only) followed by the Line-Editor agent (Tone Drift +
+    Readability, suggestion-only) -- Phase 1's sequential dispatch per
+    `MULTI_AGENT_PLAN.md`. Their results are merged by
+    ``orchestrator.reconcile_findings``.
+
+    Args:
+        docs_client: An authenticated GoogleDocsClient with write access.
+        llm_client: An OpenRouterClient to run both audit conversations on.
+        document_id: The Google Docs document ID to audit.
+        brief_id: The Google Docs document ID of the campaign brief.
+        brand_guidelines: The brand guidelines to inject into both prompts.
+        target_channel: Optional channel (e.g. "email", "blog") to filter
+            channel-specific brand guidelines by.
+        max_tool_call_rounds: The maximum number of model round trips per
+            specialist agent before that agent's run is stopped as a safety
+            backstop.
+
+    Returns:
+        The merged outcome of both specialist agents' audit passes.
+    """
+    document, campaign, guidelines_block, violations = _fetch_shared_context(
+        docs_client, document_id, brief_id, brand_guidelines, target_channel
+    )
+
+    structural_prompt = build_structural_system_prompt(
+        guidelines_block, document, campaign, violations=violations
+    )
+    line_editor_prompt = build_line_editor_system_prompt(
+        guidelines_block, document, campaign, violations=violations
+    )
+
+    # Deferred import: orchestrator.py imports Finding/AgentRunResult from
+    # this module at load time, so importing it back at module level here
+    # would be circular.
+    from verbatim.orchestrator import _run_single_agent_loop, reconcile_findings
+
+    structural_result = _run_single_agent_loop(
+        docs_client=docs_client,
+        llm_client=llm_client,
+        document_id=document_id,
+        system_prompt=structural_prompt,
+        tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+        allowed_categories=STRUCTURAL_CATEGORIES,
+        max_tool_call_rounds=max_tool_call_rounds,
+    )
+    line_editor_result = _run_single_agent_loop(
+        docs_client=docs_client,
+        llm_client=llm_client,
+        document_id=document_id,
+        system_prompt=line_editor_prompt,
+        tool_schemas=LINE_EDITOR_TOOL_SCHEMAS,
+        allowed_categories=LINE_EDITOR_CATEGORIES,
+        max_tool_call_rounds=max_tool_call_rounds,
+    )
+
+    return reconcile_findings(structural_result, line_editor_result)
+
+
+def run_agent_legacy(
+    docs_client: GoogleDocsClient,
+    llm_client: OpenRouterClient,
+    document_id: str,
+    brief_id: str,
+    brand_guidelines: BrandGuidelines,
+    target_channel: str | None = None,
+    max_tool_call_rounds: int = 20,
+) -> AgentRunResult:
+    """Run one single-pass audit conversation over a document (pre-split).
+
+    The original single-agent path: one system prompt covering all 4
+    subjective categories, one tool-calling loop against both
+    ``create_suggestion`` and ``create_inline_comment``. Kept alongside the
+    new ``run_agent`` (not deleted) so the Tue Jul 14 Eval Card validation
+    can compare the two paths' output before flipping the default -- see
+    `MULTI_AGENT_PLAN.md`.
+
+    Args:
+        docs_client: An authenticated GoogleDocsClient with write access.
+        llm_client: An OpenRouterClient to run the audit conversation on.
+        document_id: The Google Docs document ID to audit.
+        brief_id: The Google Docs document ID of the campaign brief.
+        brand_guidelines: The brand guidelines to inject into the prompt.
+        target_channel: Optional channel (e.g. "email", "blog") to filter
+            channel-specific brand guidelines by.
+        max_tool_call_rounds: The maximum number of model round trips before
+            the run is stopped as a safety backstop.
+
+    Returns:
+        The number of suggestions/comments posted and the full transcript.
+    """
+    document, campaign, guidelines_block, violations = _fetch_shared_context(
+        docs_client, document_id, brief_id, brand_guidelines, target_channel
+    )
     system_prompt = build_system_prompt(
         guidelines_block, document, campaign, violations=violations
     )
 
-    messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
-    suggestions_made = 0
-    comments_made = 0
-    category_counts: dict[str, int] = {}
-    findings: list[Finding] = []
-    stopped_due_to_max_rounds = True
-    # Tracks (tool_name, matched_text) pairs already dispatched, so the model
-    # re-flagging the same span in a later round (e.g. once during its
-    # overall-structure pass, again during its paragraph-by-paragraph pass)
-    # doesn't produce duplicate comments/suggestions on the same text.
-    seen_spans: set[tuple[str, str]] = set()
+    from verbatim.orchestrator import _run_single_agent_loop
 
-    for _round in range(max_tool_call_rounds):
-        result = llm_client.complete_chat(messages=messages, tools=TOOL_SCHEMAS)
-        messages.append(result.raw_assistant_message)
-
-        if not result.tool_calls:
-            stopped_due_to_max_rounds = False
-            break
-
-        for tool_call in result.tool_calls:
-            outcome, made_suggestion, made_comment, finding = _dispatch_tool_call(
-                docs_client, document_id, tool_call, seen_spans
-            )
-            suggestions_made += made_suggestion
-            comments_made += made_comment
-            if finding is not None:
-                category_counts[finding.category] = (
-                    category_counts.get(finding.category, 0) + 1
-                )
-                findings.append(finding)
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": outcome,
-                }
-            )
-
-    return AgentRunResult(
-        suggestions_made=suggestions_made,
-        comments_made=comments_made,
-        transcript=messages,
-        stopped_due_to_max_rounds=stopped_due_to_max_rounds,
-        category_counts=category_counts,
-        findings=findings,
+    return _run_single_agent_loop(
+        docs_client=docs_client,
+        llm_client=llm_client,
+        document_id=document_id,
+        system_prompt=system_prompt,
+        tool_schemas=TOOL_SCHEMAS,
+        allowed_categories=CATEGORIES,
+        max_tool_call_rounds=max_tool_call_rounds,
     )
-
-
-def _dispatch_tool_call(
-    docs_client: GoogleDocsClient,
-    document_id: str,
-    tool_call: ToolCall,
-    seen_spans: set[tuple[str, str]],
-) -> tuple[str, int, int, Finding | None]:
-    """Dispatch one tool call to GoogleDocsClient, returning a tool-result message.
-
-    Args:
-        docs_client: The client to dispatch the write to.
-        document_id: The document being audited.
-        tool_call: The model's requested tool call.
-        seen_spans: (tool_name, matched_text) pairs already dispatched this
-            run; a repeat is skipped rather than posted again, since the
-            model re-visits the same span across its structure pass and its
-            paragraph-by-paragraph pass.
-
-    Returns:
-        A tuple of (result text for the model, suggestions made, comments
-        made, finding). ``finding`` is set on a real successful dispatch, or
-        ``None`` on any skip/error/unknown-tool branch. The schema's
-        ``required`` list isn't hard-enforced by OpenRouter/OpenAI-style
-        function calling, so a dispatched call missing ``category`` falls
-        back to ``"uncategorized"``, and one missing ``rationale`` falls
-        back to an empty detail, rather than raising. DocsClientError
-        failures are caught and surfaced as result text rather than raised,
-        giving the model a chance to retry in the same run.
-    """
-    try:
-        if tool_call.name == "create_suggestion":
-            matched = tool_call.arguments["matched_text"]
-            replacement = tool_call.arguments["replacement_text"]
-            if matched == replacement:
-                return (
-                    "Suggestion matches existing text; no change needed.",
-                    0,
-                    0,
-                    None,
-                )
-            span_key = (tool_call.name, matched)
-            if span_key in seen_spans:
-                return "Already flagged this text; skipping duplicate.", 0, 0, None
-            docs_client.create_suggestion(
-                document_id=document_id,
-                matched_text=matched,
-                replacement_text=replacement,
-            )
-            seen_spans.add(span_key)
-            finding = Finding(
-                category=tool_call.arguments.get("category", "uncategorized"),
-                kind="suggestion",
-                matched_text=matched,
-                detail=tool_call.arguments.get("rationale", ""),
-            )
-            return "Suggestion created.", 1, 0, finding
-        if tool_call.name == "create_inline_comment":
-            matched = tool_call.arguments["matched_text"]
-            span_key = (tool_call.name, matched)
-            if span_key in seen_spans:
-                return "Already flagged this text; skipping duplicate.", 0, 0, None
-            comment = tool_call.arguments["comment"]
-            docs_client.create_inline_comment(
-                document_id=document_id,
-                matched_text=matched,
-                comment=comment,
-            )
-            seen_spans.add(span_key)
-            finding = Finding(
-                category=tool_call.arguments.get("category", "uncategorized"),
-                kind="comment",
-                matched_text=matched,
-                detail=comment,
-            )
-            return "Comment created.", 0, 1, finding
-        return f"Unknown tool: {tool_call.name}", 0, 0, None
-    except DocsClientError as err:
-        return f"Error: {err}", 0, 0, None

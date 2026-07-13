@@ -4,19 +4,7 @@ from typing import Any
 
 from verbatim.docs_client import CampaignContext, DocumentContent
 from verbatim.evaluator import Violation
-
-# Matches brand_guidelines.json's `rules` keys exactly -- the same convention
-# evaluator.py's Violation.category already uses for its 3 deterministic
-# categories, extended here to all 7 so every tool call can be tagged.
-CATEGORIES: list[str] = [
-    "tone_drift",
-    "information_hierarchy",
-    "cta_cadence",
-    "readability",
-    "formatting_and_style",
-    "channel_constraints",
-    "banned_words_and_competitors",
-]
+from verbatim.prompts.shared import CATEGORIES as CATEGORIES
 
 # Display labels for CATEGORIES, matching addon/Code.gs's CATEGORY_LABELS --
 # kept in sync by hand since Apps Script and Python can't share a module.
