@@ -115,6 +115,15 @@ def main(args: list[str] | None = None) -> None:
                     detail = f" -- {finding.detail}" if finding.detail else ""
                     print(f'  [{kind_label}] "{finding.matched_text}"{detail}')
 
+        if result.cross_agent_overlaps:
+            print("\nCross-agent overlaps (flagged, not resolved -- see issue #58):")
+            for structural_finding, line_editor_finding in result.cross_agent_overlaps:
+                print(
+                    f'  "{structural_finding.matched_text}" -- '
+                    f"{structural_finding.category} (structural) vs. "
+                    f"{line_editor_finding.category} (line-editor)"
+                )
+
     except (
         DocsClientError,
         LLMClientError,

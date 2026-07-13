@@ -173,3 +173,108 @@ class TestReconcileFindings:
         assert result.category_counts == {}
         assert result.findings == []
         assert result.stopped_due_to_max_rounds is False
+        assert result.cross_agent_overlaps == []
+
+    def test_flags_identical_matched_text_across_agents_as_an_overlap(self) -> None:
+        """Both agents flagging the exact same span is surfaced, not resolved.
+
+        See #58: Structural and Line-Editor independently flagged the same
+        three words with conflicting advice (relocate vs. reword in place).
+        reconcile_findings doesn't adjudicate which one "wins" -- it just
+        surfaces the overlap so a copywriter (or a future Eval Card pass)
+        can see it happened.
+        """
+        structural_finding = Finding(
+            category="cta_cadence",
+            kind="comment",
+            matched_text="Upgrade your plan.",
+            detail="This CTA is premature.",
+        )
+        line_editor_finding = Finding(
+            category="tone_drift",
+            kind="suggestion",
+            matched_text="Upgrade your plan.",
+            detail="Soften the abrupt command.",
+        )
+        structural = AgentRunResult(
+            suggestions_made=0,
+            comments_made=1,
+            transcript=[],
+            findings=[structural_finding],
+        )
+        line_editor = AgentRunResult(
+            suggestions_made=1,
+            comments_made=0,
+            transcript=[],
+            findings=[line_editor_finding],
+        )
+
+        result = reconcile_findings(structural, line_editor)
+
+        assert result.cross_agent_overlaps == [
+            (structural_finding, line_editor_finding)
+        ]
+
+    def test_flags_one_matched_text_containing_the_other_as_an_overlap(self) -> None:
+        """A span overlap doesn't require an exact match, just containment."""
+        structural_finding = Finding(
+            category="information_hierarchy",
+            kind="comment",
+            matched_text="Upgrade your plan. Explore your options today.",
+            detail="Reorder this paragraph.",
+        )
+        line_editor_finding = Finding(
+            category="tone_drift",
+            kind="suggestion",
+            matched_text="Upgrade your plan.",
+            detail="Soften the abrupt command.",
+        )
+        structural = AgentRunResult(
+            suggestions_made=0,
+            comments_made=1,
+            transcript=[],
+            findings=[structural_finding],
+        )
+        line_editor = AgentRunResult(
+            suggestions_made=1,
+            comments_made=0,
+            transcript=[],
+            findings=[line_editor_finding],
+        )
+
+        result = reconcile_findings(structural, line_editor)
+
+        assert result.cross_agent_overlaps == [
+            (structural_finding, line_editor_finding)
+        ]
+
+    def test_does_not_flag_disjoint_spans_as_an_overlap(self) -> None:
+        """Findings on unrelated text aren't reported as overlapping."""
+        structural_finding = Finding(
+            category="cta_cadence",
+            kind="comment",
+            matched_text="Buy now",
+            detail="CTA appears before the value proposition.",
+        )
+        line_editor_finding = Finding(
+            category="tone_drift",
+            kind="suggestion",
+            matched_text="ain't",
+            detail="Too casual for this brand voice.",
+        )
+        structural = AgentRunResult(
+            suggestions_made=0,
+            comments_made=1,
+            transcript=[],
+            findings=[structural_finding],
+        )
+        line_editor = AgentRunResult(
+            suggestions_made=1,
+            comments_made=0,
+            transcript=[],
+            findings=[line_editor_finding],
+        )
+
+        result = reconcile_findings(structural, line_editor)
+
+        assert result.cross_agent_overlaps == []
