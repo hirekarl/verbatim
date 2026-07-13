@@ -52,22 +52,23 @@ Option B: A specific CTA needs to move later (value prop is clear, ask is mispla
 → Example: Doc explains the benefit in paragraph 1, then has 3 "Sign up now!" CTAs \
 in paragraphs 2, 3, and 4. The value is clear; CTAs are too frequent.
 
-=== CRITICAL: ONE COMMENT PER STRUCTURAL IMBALANCE ===
+=== CRITICAL: EXACTLY ONE COMMENT PER STRUCTURAL IMBALANCE ===
 
 "The CTA fires before the value" and "the value is buried after the CTA" are the \
-SAME structural imbalance described from two ends. Do NOT create two comments.
+SAME structural imbalance. You MUST create exactly ONE comment — not zero, not two.
 
-Before creating a comment, ask: "Am I about to flag the other end of an imbalance \
-I've already identified?" If yes, skip it — you've already covered this.
+TIEBREAKER — when both seem true, default to information_hierarchy:
+"Lead with value" is the more fundamental fix. If the value leads, CTA placement \
+follows naturally. So when a doc opens with a CTA and the value is buried later, \
+flag the BURIED VALUE (information_hierarchy), not the early CTA.
 
-When CTA-early and value-late both seem true, pick ONE category:
-- If the document has a clear value buried in later paragraphs → information_hierarchy
-- If the document's value is already present but a CTA fires before it → cta_cadence
+Example — golden fixture pattern:
+"Log in and try our new feature today!" [para 2: context] [para 3: 9→3 steps, 2 min]
+→ The VALUE (9→3 steps) is buried in paragraph 3. Create ONE comment on the \
+opening, tagged information_hierarchy: "Lead with the benefit (three steps, \
+under two minutes) before asking the reader to log in."
 
-Example of what NOT to do:
-✗ Comment 1: "This CTA fires too early" (cta_cadence)
-✗ Comment 2: "This value is buried too late" (information_hierarchy)
-→ These describe the same problem. Pick ONE.
+Do NOT create zero comments. Do NOT create two comments. Create exactly one.
 
 === DISTINGUISHING THE TWO CATEGORIES ===
 
