@@ -68,12 +68,10 @@ def _find_anchor_text(body_text: str) -> str | None:
     for p in paragraphs:
         if body_text.count(p) == 1:
             return p
-    # If no whole paragraph is unique, try sentences or words
-    words = body_text.split()
-    for w in words:
-        if body_text.count(w) == 1:
-            return w
-    # Fallback to the first 20 characters if unique
+    # Fallback to the first 20 characters if unique. (No word-level tier: any
+    # paragraph containing a textually-unique word is itself unique, so the
+    # loop above always catches it first -- a word-level fallback here would
+    # be unreachable.)
     if len(body_text) >= 20:
         candidate = body_text[:20]
         if body_text.count(candidate) == 1:

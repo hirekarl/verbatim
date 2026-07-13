@@ -4,7 +4,13 @@ from unittest.mock import MagicMock
 import pytest
 from pytest_mock import MockerFixture
 
-from verbatim.agent import AgentRunResult, Finding, run_agent, run_agent_legacy
+from verbatim.agent import (
+    AgentRunResult,
+    Finding,
+    _find_anchor_text,
+    run_agent,
+    run_agent_legacy,
+)
 from verbatim.brand_guidelines import BrandGuidelines
 from verbatim.docs_client import (
     CampaignContext,
@@ -634,6 +640,49 @@ class TestRunSingleAgentLoop:
         assert result.suggestions_made == 3
 
 
+class TestFindAnchorText:
+    """Tests for _find_anchor_text's unique-substring search.
+
+    Only two tiers are reachable: whole-paragraph match, then a first-20-
+    characters fallback. A word-level tier used to sit between them but was
+    dead code -- any paragraph containing a textually-unique word is itself
+    unique, so the paragraph loop always returns first. Removed Jul 13.
+    """
+
+    def test_returns_none_for_empty_body_text(self) -> None:
+        assert _find_anchor_text("") is None
+
+    def test_returns_a_unique_paragraph(self) -> None:
+        assert _find_anchor_text("Big News! Feature helps you.") == (
+            "Big News! Feature helps you."
+        )
+
+    def test_skips_non_unique_paragraphs_to_find_a_unique_one(self) -> None:
+        """Repeated paragraphs are skipped in favor of one that's unique."""
+        text = "dup\ndup\nfoo bar unique_word baz"
+
+        assert _find_anchor_text(text) == "foo bar unique_word baz"
+
+    def test_falls_back_to_first_20_characters_when_no_paragraph_is_unique(
+        self,
+    ) -> None:
+        text = "same paragraph line\nsame paragraph line"
+
+        assert _find_anchor_text(text) == text[:20]
+
+    def test_returns_none_when_nothing_is_unique_and_body_is_short(self) -> None:
+        """Repeated, short content leaves no paragraph or 20-char anchor."""
+        assert _find_anchor_text("hi\nhi") is None
+
+    def test_returns_none_when_the_20_char_candidate_is_also_not_unique(
+        self,
+    ) -> None:
+        """Long but repetitive content exhausts every fallback tier."""
+        text = "this is a duplicated line\nthis is a duplicated line"
+
+        assert _find_anchor_text(text) is None
+
+
 class TestRunAgentLegacy:
     """Tests for run_agent_legacy's single-pass tool-calling conversation.
 
@@ -781,6 +830,68 @@ class TestRunAgentLegacy:
         kwargs = mock_build.call_args.kwargs
         assert "[WARNING] Brand voice and style guidelines are unavailable" in args[0]
         assert kwargs.get("violations") == []
+
+    def test_skips_warning_comment_when_document_has_no_anchor_text(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        mocker: MockerFixture,
+    ) -> None:
+        """If no unique anchor exists in the doc, don't post a comment at all."""
+        docs_client.get_document_content.return_value = DocumentContent(
+            document_id="doc-id", title="Draft", body_text="hi\nhi", headings=[]
+        )
+        bad_guidelines = MagicMock(spec=BrandGuidelines)
+        bad_guidelines.is_valid = False
+        bad_guidelines.error_message = "File is corrupt"
+        bad_guidelines.filepath = MagicMock()
+        bad_guidelines.filepath.name = "brand_guidelines.json"
+
+        mocker.patch("verbatim.agent.build_system_prompt", return_value="Prompt")
+        llm_client.complete_chat.return_value = _no_tool_calls_result()
+
+        run_agent_legacy(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            brief_id="brief-id",
+            brand_guidelines=bad_guidelines,
+        )
+
+        docs_client.create_inline_comment.assert_not_called()
+        docs_client.clear_cache.assert_not_called()
+
+    def test_swallows_a_failed_warning_comment_and_keeps_going(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+        mocker: MockerFixture,
+    ) -> None:
+        """A create_inline_comment failure while warning shouldn't abort the run."""
+        docs_client.create_inline_comment.side_effect = RuntimeError("Docs API down")
+        bad_guidelines = MagicMock(spec=BrandGuidelines)
+        bad_guidelines.is_valid = False
+        bad_guidelines.error_message = "File is corrupt"
+        bad_guidelines.filepath = MagicMock()
+        bad_guidelines.filepath.name = "brand_guidelines.json"
+
+        mock_build = mocker.patch(
+            "verbatim.agent.build_system_prompt", return_value="Prompt"
+        )
+        llm_client.complete_chat.return_value = _no_tool_calls_result()
+
+        result = run_agent_legacy(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            brief_id="brief-id",
+            brand_guidelines=bad_guidelines,
+        )
+
+        assert result.suggestions_made == 0
+        assert result.comments_made == 0
+        docs_client.clear_cache.assert_not_called()
+        mock_build.assert_called_once()
 
 
 class TestRunAgentSpecialistDispatch:
