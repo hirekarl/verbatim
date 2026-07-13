@@ -115,6 +115,12 @@ def main(args: list[str] | None = None) -> None:
                     detail = f" -- {finding.detail}" if finding.detail else ""
                     print(f'  [{kind_label}] "{finding.matched_text}"{detail}')
 
+        if result.specialist_errors:
+            print("\nWarning: one specialist agent failed (see #63) --")
+            print("results below are from the other specialist only:")
+            for name, err in result.specialist_errors.items():
+                print(f"  {name}: {err}")
+
         if result.cross_agent_overlaps:
             print("\nCross-agent overlaps (flagged, not resolved -- see issue #58):")
             for structural_finding, line_editor_finding in result.cross_agent_overlaps:

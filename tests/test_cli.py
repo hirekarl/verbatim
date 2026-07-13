@@ -201,6 +201,52 @@ class TestCLI:
         captured = capsys.readouterr()
         assert "Cross-agent overlaps" not in captured.out
 
+    def test_cli_prints_specialist_errors_when_present(
+        self,
+        mock_run_agent: MagicMock,
+        mock_docs_client: MagicMock,
+        mock_llm_client: MagicMock,
+        mock_brand_guidelines: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """A partial result (#63) surfaces which specialist failed and why."""
+        fake_result = AgentRunResult(
+            suggestions_made=1,
+            comments_made=0,
+            transcript=[],
+            stopped_due_to_max_rounds=False,
+            specialist_errors={"structural": "structural boom"},
+        )
+        mock_run_agent.return_value = fake_result
+
+        main(["doc-id", "brief-id"])
+
+        captured = capsys.readouterr()
+        assert "Warning: one specialist agent failed" in captured.out
+        assert "structural: structural boom" in captured.out
+
+    def test_cli_omits_specialist_errors_section_when_none_found(
+        self,
+        mock_run_agent: MagicMock,
+        mock_docs_client: MagicMock,
+        mock_llm_client: MagicMock,
+        mock_brand_guidelines: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """No failure noise in the common case where both specialists succeeded."""
+        fake_result = AgentRunResult(
+            suggestions_made=1,
+            comments_made=0,
+            transcript=[],
+            stopped_due_to_max_rounds=False,
+        )
+        mock_run_agent.return_value = fake_result
+
+        main(["doc-id", "brief-id"])
+
+        captured = capsys.readouterr()
+        assert "Warning: one specialist agent failed" not in captured.out
+
     def test_cli_success_defaults(
         self,
         mock_run_agent: MagicMock,
