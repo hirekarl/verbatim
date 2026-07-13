@@ -7,6 +7,9 @@
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/script.external_request"
   ],
+  "urlFetchWhitelist": [
+    "https://verbatim-backend-75857425003.us-east4.run.app/"
+  ],
   "addOns": {
     "common": {
       "name": "Verbatim",

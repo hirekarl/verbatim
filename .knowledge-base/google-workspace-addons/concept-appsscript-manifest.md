@@ -43,6 +43,15 @@ Per `docs/workspace-addon-migration.md` §4, the recommended auth model has Apps
 - `drive` — same full-`drive` scope already required today (confirmed live, documented in `../google-drive-api/MAP.md`) for `comments.create` to work on documents the app didn't create/open itself.
 - `script.external_request` — required for `UrlFetchApp` to call any non-Google host (the Python backend). Without this scope, `UrlFetchApp.fetch()` throws at runtime.
 
+## `urlFetchWhitelist`
+
+Per Google's docs (<https://developers.google.com/apps-script/manifest/allowlist-url>), restricts which hosts `UrlFetchApp.fetch()` (see `concept-urlfetchapp.md`) is allowed to call — `oauthScopes`' `script.external_request` alone is not enough. Not yet verified live via an actual `clasp push` + deploy (unlike the `addOns.docs` nesting above); update this note once that's confirmed.
+
+- Each entry is an HTTPS URL **prefix**: must start with `https://`, have a full domain, and a non-empty path (`https://host.com/` is valid, `https://host.com` is not).
+- Prefix matching covers child paths, query strings, and fragments — `https://host.com/foo` matches `https://host.com/foo/bar`, so a single trailing-slash entry for a backend's base URL covers all of its routes.
+- A single **leading** wildcard is allowed for subdomains (`https://*.example.com/foo`); more than one wildcard, or one not in leading position, is rejected when the manifest is saved.
+- **Optional for Test deployments, required for versioned deployments** — this is why a manifest missing `urlFetchWhitelist` can pass local `Deploy → Test deployments` runs and still fail the first time someone creates an actual versioned deployment. Keep it in sync with whatever `BACKEND_URL` Script Property the Add-on is pointed at (`addon/README.md`).
+
 ## `addOns.docs`
 
 Scopes the Add-on to Docs only (as opposed to `addOns.common` alone, which would make it a general Workspace Add-on offered across multiple hosts). `homepageTrigger.runFunction` names the function that builds and returns the sidebar's initial `Card` — see `concept-cardservice-ui.md`.
