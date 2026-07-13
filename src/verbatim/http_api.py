@@ -125,6 +125,7 @@ class AuditResponse(BaseModel):
     stopped_due_to_max_rounds: bool
     category_counts: dict[str, int]
     findings: list[FindingResponse] = []
+    specialist_errors: dict[str, str] = {}
 
 
 class AuditJobSubmitResponse(BaseModel):
@@ -241,6 +242,7 @@ def _run_audit_job(
                 comments_made=result.comments_made,
                 stopped_due_to_max_rounds=result.stopped_due_to_max_rounds,
                 category_counts=result.category_counts,
+                specialist_errors=result.specialist_errors,
                 findings=[
                     FindingResponse(
                         category=finding.category,
