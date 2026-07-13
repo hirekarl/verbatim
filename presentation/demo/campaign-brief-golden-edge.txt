@@ -1,0 +1,9 @@
+Campaign Brief: Two-Factor Auth Rollout Notice
+
+Channel: Email
+Audience: All active accounts
+Goal: Get users to turn on two-factor authentication
+Key message: Two-factor auth is now available and takes under a minute to set up; accounts without it will see a warning banner starting next month
+Primary CTA: Turn on two-factor authentication
+Tone: Direct, reassuring, one CTA placed after the reason is explained
+Must avoid: Leading with the ask before the reason is given; passive constructions

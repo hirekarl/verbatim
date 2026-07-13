@@ -1,0 +1,5 @@
+Two-factor authentication should be turned on by every account today.
+
+Starting next month, any account without two-factor authentication turned on will see a warning banner every time you log in. Setup takes under a minute: add your phone number, confirm the code we text you, and you're done.
+
+We're rolling this out because password-only logins are the single most common way accounts get compromised, and two-factor cuts that risk dramatically.

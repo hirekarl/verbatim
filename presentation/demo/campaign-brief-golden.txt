@@ -1,0 +1,9 @@
+Campaign Brief: Onboarding Redesign Announcement
+
+Channel: Blog
+Audience: Existing customers who signed up more than six months ago
+Goal: Get existing customers to log in and try the redesigned onboarding flow
+Key message: Onboarding is now three steps instead of nine, and takes under two minutes
+Primary CTA: Log in and try the new onboarding
+Tone: Plain, confident, benefits-first
+Must avoid: Asking for the click before explaining what changed and why it matters; passive constructions that hide who did the work
