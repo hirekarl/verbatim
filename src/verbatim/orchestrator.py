@@ -80,8 +80,19 @@ def reconcile_findings(
 
     Returns:
         One combined ``AgentRunResult`` representing both agents' output.
-
-    Raises:
-        NotImplementedError: Stub; implemented Mon Jul 13.
     """
-    raise NotImplementedError
+    category_counts = dict(structural.category_counts)
+    for category, count in line_editor.category_counts.items():
+        category_counts[category] = category_counts.get(category, 0) + count
+
+    return AgentRunResult(
+        suggestions_made=structural.suggestions_made + line_editor.suggestions_made,
+        comments_made=structural.comments_made + line_editor.comments_made,
+        transcript=structural.transcript + line_editor.transcript,
+        stopped_due_to_max_rounds=(
+            structural.stopped_due_to_max_rounds
+            or line_editor.stopped_due_to_max_rounds
+        ),
+        category_counts=category_counts,
+        findings=structural.findings + line_editor.findings,
+    )
