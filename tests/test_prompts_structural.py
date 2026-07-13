@@ -201,6 +201,34 @@ class TestBuildStructuralSystemPrompt:
             "'competitor' (matched: 'competitor')"
         ) in prompt
 
+    def test_includes_suggestion_in_deterministic_findings_when_present(self) -> None:
+        """Deterministic findings include '-> Suggestion:' when violation has one."""
+        document = DocumentContent(
+            document_id="doc-id", title="Draft", body_text="Body.", headings=[]
+        )
+        campaign = CampaignContext(
+            document_id="brief-id", title="Brief", body_text="Goals.", headings=[]
+        )
+        violations = [
+            Violation(
+                category="banned_words_and_competitors",
+                severity="warning",
+                message="Non-standard spelling: Never hyphenate 'email'",
+                matched_text="e-mail",
+                suggestion="email",
+            ),
+        ]
+
+        prompt = build_structural_system_prompt(
+            guidelines_block="",
+            document=document,
+            campaign=campaign,
+            violations=violations,
+        )
+
+        assert "=== DETERMINISTIC FINDINGS ===" in prompt
+        assert "-> Suggestion: 'email'" in prompt
+
     def test_excludes_deterministic_findings_when_violations_empty_or_none(
         self,
     ) -> None:
