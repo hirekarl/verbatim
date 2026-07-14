@@ -1,5 +1,6 @@
 """Tests for the Anthropic LLM client module."""
 
+import logging
 from types import SimpleNamespace
 from typing import Any
 
@@ -14,6 +15,7 @@ from verbatim.llm_client import (
     LLMClientError,
     MissingAPIKeyError,
     ToolCall,
+    _ipv4_only_http_client,
 )
 
 _FAKE_REQUEST = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
@@ -51,6 +53,24 @@ def _fake_response(content: list[SimpleNamespace]) -> SimpleNamespace:
     return SimpleNamespace(content=content)
 
 
+class TestIpv4OnlyHttpClient:
+    """Tests for the IPv4-forcing httpx.Client builder."""
+
+    def test_binds_to_a_literal_ipv4_address_to_force_the_v4_stack(self) -> None:
+        """The transport binds to 0.0.0.0 -- httpx's documented IPv4-only trick.
+
+        Cloud Run's default (non-VPC) networking has no outbound IPv6 route,
+        but api.anthropic.com resolves to both an A and an AAAA record; left
+        alone, httpx can pick the unreachable IPv6 address and fail the
+        connection outright instead of falling back to IPv4.
+        """
+        client = _ipv4_only_http_client()
+
+        transport = client._transport
+        assert isinstance(transport, httpx.HTTPTransport)
+        assert transport._pool._local_address == "0.0.0.0"
+
+
 class TestFromEnv:
     """Tests for AnthropicClient.from_env."""
 
@@ -77,7 +97,10 @@ class TestFromEnv:
 
         client = AnthropicClient.from_env(model="claude-sonnet-5")
 
-        mock_anthropic.assert_called_once_with(api_key="sk-ant-test")
+        assert mock_anthropic.call_count == 1
+        kwargs = mock_anthropic.call_args.kwargs
+        assert kwargs["api_key"] == "sk-ant-test"
+        assert isinstance(kwargs["http_client"], httpx.Client)
         assert client._model == "claude-sonnet-5"
 
     def test_loads_dotenv_before_reading_the_api_key(
@@ -96,7 +119,10 @@ class TestFromEnv:
         AnthropicClient.from_env(model="claude-sonnet-5")
 
         self.mock_load_dotenv.assert_called_once()
-        mock_anthropic.assert_called_once_with(api_key="sk-ant-from-dotenv")
+        assert mock_anthropic.call_count == 1
+        kwargs = mock_anthropic.call_args.kwargs
+        assert kwargs["api_key"] == "sk-ant-from-dotenv"
+        assert isinstance(kwargs["http_client"], httpx.Client)
 
 
 class TestCompleteChat:
@@ -235,6 +261,36 @@ class TestCompleteChat:
         with pytest.raises(LLMClientError):
             client.complete_chat(system="", messages=[], tools=[])
 
+    def test_logs_the_underlying_exception_on_connection_error(
+        self,
+        client: AnthropicClient,
+        mock_create: Any,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """The raw SDK/httpx error is logged with its traceback before wrapping.
+
+        The wrapped LLMClientError message alone (just str(err)) has been too
+        thin to diagnose real network failures -- e.g. distinguishing a DNS/
+        IPv6-egress problem from a genuine outage. Logging the original
+        exception (exc_info) preserves the full chain, including whatever
+        httpx/httpcore attached as __cause__.
+        """
+        underlying = APIConnectionError(
+            message="connection failed", request=_FAKE_REQUEST
+        )
+        mock_create.side_effect = underlying
+
+        with (
+            caplog.at_level(logging.ERROR, logger="verbatim.llm_client"),
+            pytest.raises(LLMClientError),
+        ):
+            client.complete_chat(system="", messages=[], tools=[])
+
+        assert len(caplog.records) == 1
+        record = caplog.records[0]
+        assert record.exc_info is not None
+        assert record.exc_info[1] is underlying
+
     def test_raises_llm_client_error_on_rate_limit_error(
         self, client: AnthropicClient, mock_create: Any
     ) -> None:
@@ -274,7 +330,7 @@ class TestNewInstance:
 
         assert second is not client
         assert second._model == client._model
-        assert mock_anthropic.call_args_list == [
-            mocker.call(api_key="sk-ant-test"),
-            mocker.call(api_key="sk-ant-test"),
-        ]
+        assert mock_anthropic.call_count == 2
+        for call in mock_anthropic.call_args_list:
+            assert call.kwargs["api_key"] == "sk-ant-test"
+            assert isinstance(call.kwargs["http_client"], httpx.Client)

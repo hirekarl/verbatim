@@ -1,13 +1,31 @@
 """Anthropic LLM client: a thin wrapper around the native Anthropic SDK."""
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any, cast
 
 import anthropic
+import httpx
 from dotenv import load_dotenv
 
 DEFAULT_MODEL = "claude-sonnet-5"
+
+logger = logging.getLogger(__name__)
+
+
+def _ipv4_only_http_client() -> httpx.Client:
+    """Build an httpx.Client that only ever binds to an IPv4 local address.
+
+    Hosted deployments (Cloud Run without a VPC connector) have no outbound
+    IPv6 route, but api.anthropic.com resolves to both an A and an AAAA
+    record. Left alone, httpx/httpcore can select the unreachable IPv6
+    address and fail the connection outright rather than falling back to
+    IPv4. Binding the transport to the literal address "0.0.0.0" is httpx's
+    documented trick to force the IPv4 stack. See
+    https://www.python-httpx.org/advanced/#binding-to-network-interfaces.
+    """
+    return httpx.Client(transport=httpx.HTTPTransport(local_address="0.0.0.0"))
 
 
 class LLMClientError(Exception):
@@ -47,7 +65,9 @@ class AnthropicClient:
             model: The Claude model identifier to request completions from.
         """
         self._api_key = api_key
-        self._client = anthropic.Anthropic(api_key=api_key)
+        self._client = anthropic.Anthropic(
+            api_key=api_key, http_client=_ipv4_only_http_client()
+        )
         self._model = model
 
     @classmethod
@@ -119,14 +139,19 @@ class AnthropicClient:
                 tools=cast(Any, tools),
             )
         except anthropic.APIConnectionError as err:
+            logger.exception("Anthropic chat completion request failed: network error")
             raise LLMClientError(
                 f"Anthropic chat completion request failed: network error: {err}"
             ) from err
         except anthropic.RateLimitError as err:
+            logger.exception("Anthropic chat completion request failed: rate limited")
             raise LLMClientError(
                 f"Anthropic chat completion request failed: rate limited: {err}"
             ) from err
         except anthropic.APIStatusError as err:
+            logger.exception(
+                "Anthropic chat completion request failed: API status error"
+            )
             raise LLMClientError(
                 f"Anthropic chat completion request failed: {err}"
             ) from err
