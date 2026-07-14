@@ -1,12 +1,15 @@
-"""Contract tests for orchestrator.reconcile_findings.
+"""Contract tests for orchestrator.reconcile_findings and _dispatch_tool_call.
 
 Written against the `orchestrator.py` stub (`orchestrator.py`'s functions
 currently `raise NotImplementedError`) as the TDD red step for Mon Jul 13's
 Phase 1 implementation -- see `TODO.md` and `MULTI_AGENT_PLAN.md`.
 """
 
+from unittest.mock import MagicMock
+
 from verbatim.agent import AgentRunResult, Finding
-from verbatim.orchestrator import reconcile_findings
+from verbatim.llm_client import ToolCall
+from verbatim.orchestrator import _dispatch_tool_call, reconcile_findings
 
 _EMPTY = AgentRunResult(suggestions_made=0, comments_made=0, transcript=[])
 
@@ -278,3 +281,87 @@ class TestReconcileFindings:
         result = reconcile_findings(structural, line_editor)
 
         assert result.cross_agent_overlaps == []
+
+
+class TestDispatchToolCall:
+    """Tests for _dispatch_tool_call's error handling."""
+
+    def test_returns_error_message_when_matched_text_missing_from_suggestion(
+        self,
+    ) -> None:
+        """A malformed create_suggestion call missing matched_text returns an error."""
+        docs_client = MagicMock()
+        tool_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            # missing matched_text
+            arguments={"replacement_text": "new text", "rationale": "fix"},
+        )
+
+        result, suggestions, comments, finding = _dispatch_tool_call(
+            docs_client=docs_client,
+            document_id="doc-id",
+            tool_call=tool_call,
+            seen_spans=set(),
+            allowed_categories=["tone_drift", "readability"],
+        )
+
+        assert "Missing required field" in result
+        assert "'matched_text'" in result
+        assert suggestions == 0
+        assert comments == 0
+        assert finding is None
+        docs_client.create_suggestion.assert_not_called()
+
+    def test_returns_error_message_when_replacement_text_missing_from_suggestion(
+        self,
+    ) -> None:
+        """Malformed create_suggestion missing replacement_text returns an error."""
+        docs_client = MagicMock()
+        tool_call = ToolCall(
+            id="call_1",
+            name="create_suggestion",
+            # missing replacement_text
+            arguments={"matched_text": "old text", "rationale": "fix"},
+        )
+
+        result, suggestions, comments, finding = _dispatch_tool_call(
+            docs_client=docs_client,
+            document_id="doc-id",
+            tool_call=tool_call,
+            seen_spans=set(),
+            allowed_categories=["tone_drift", "readability"],
+        )
+
+        assert "Missing required field" in result
+        assert "'replacement_text'" in result
+        assert suggestions == 0
+        assert comments == 0
+        assert finding is None
+        docs_client.create_suggestion.assert_not_called()
+
+    def test_returns_error_message_when_matched_text_missing_from_comment(
+        self,
+    ) -> None:
+        """Malformed create_inline_comment missing matched_text returns an error."""
+        docs_client = MagicMock()
+        tool_call = ToolCall(
+            id="call_1",
+            name="create_inline_comment",
+            arguments={"comment": "This is wrong"},  # no matched_text
+        )
+
+        result, suggestions, comments, finding = _dispatch_tool_call(
+            docs_client=docs_client,
+            document_id="doc-id",
+            tool_call=tool_call,
+            seen_spans=set(),
+            allowed_categories=["information_hierarchy", "cta_cadence"],
+        )
+
+        assert "Missing required field" in result
+        assert "'matched_text'" in result
+        assert suggestions == 0
+        assert comments == 0
+        assert finding is None
+        docs_client.create_inline_comment.assert_not_called()

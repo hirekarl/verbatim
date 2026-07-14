@@ -95,6 +95,14 @@ def _dispatch_tool_call(
             )
             return "Comment created.", 0, 1, finding
         return f"Unknown tool: {tool_call.name}", 0, 0, None
+    except KeyError as err:
+        return (
+            f"Error: Missing required field {err}. "
+            "Please retry with all required fields.",
+            0,
+            0,
+            None,
+        )
     except DocsClientError as err:
         return f"Error: {err}", 0, 0, None
 
