@@ -10,12 +10,12 @@ authors = [
     { name = "Christina Ruiz" },
 ]
 dependencies = [
+    "anthropic>=0.116.0",
     "fastapi>=0.121.2",
     "google-api-python-client>=2.198.0",
     "google-auth-httplib2>=0.4.0",
     "google-auth-oauthlib>=1.4.0",
     "httpx>=0.28.1",
-    "openai>=2.44.0",
     "python-dotenv>=1.2.2",
     "uvicorn[standard]>=0.38.0",
 ]

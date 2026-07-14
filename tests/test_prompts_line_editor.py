@@ -28,23 +28,23 @@ class TestLineEditorToolSchemas:
 
     def test_defines_exactly_the_one_suggestion_tool(self) -> None:
         """create_suggestion only -- create_inline_comment is never available."""
-        names = {schema["function"]["name"] for schema in LINE_EDITOR_TOOL_SCHEMAS}
+        names = {schema["name"] for schema in LINE_EDITOR_TOOL_SCHEMAS}
 
         assert names == {"create_suggestion"}
 
-    def test_all_schemas_are_type_function(self) -> None:
-        """Every schema uses the OpenAI function-calling tool type."""
-        assert all(schema["type"] == "function" for schema in LINE_EDITOR_TOOL_SCHEMAS)
+    def test_all_schemas_use_the_flat_claude_tool_shape(self) -> None:
+        """Every schema is flat -- no OpenAI-style type/function wrapper."""
+        assert all("type" not in schema for schema in LINE_EDITOR_TOOL_SCHEMAS)
+        assert all("function" not in schema for schema in LINE_EDITOR_TOOL_SCHEMAS)
+        assert all("input_schema" in schema for schema in LINE_EDITOR_TOOL_SCHEMAS)
 
     def test_create_suggestion_requires_matched_and_replacement_text(self) -> None:
         """create_suggestion's schema requires the fields the dispatcher needs."""
         schema = next(
-            s
-            for s in LINE_EDITOR_TOOL_SCHEMAS
-            if s["function"]["name"] == "create_suggestion"
+            s for s in LINE_EDITOR_TOOL_SCHEMAS if s["name"] == "create_suggestion"
         )
 
-        required = schema["function"]["parameters"]["required"]
+        required = schema["input_schema"]["required"]
 
         assert "matched_text" in required
         assert "replacement_text" in required
@@ -59,12 +59,10 @@ class TestLineEditorToolSchemas:
         the other 5 categories that belong to a different agent.
         """
         schema = next(
-            s
-            for s in LINE_EDITOR_TOOL_SCHEMAS
-            if s["function"]["name"] == "create_suggestion"
+            s for s in LINE_EDITOR_TOOL_SCHEMAS if s["name"] == "create_suggestion"
         )
-        properties = schema["function"]["parameters"]["properties"]
-        required = schema["function"]["parameters"]["required"]
+        properties = schema["input_schema"]["properties"]
+        required = schema["input_schema"]["required"]
 
         assert "category" in required
         assert properties["category"]["enum"] == LINE_EDITOR_CATEGORIES

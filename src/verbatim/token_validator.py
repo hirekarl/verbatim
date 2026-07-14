@@ -27,7 +27,7 @@ def _get_expected_client_id() -> str:
     """Load the expected OAuth client ID (audience) from the environment.
 
     Loads a `.env` file first, if one is present, mirroring
-    `OpenRouterClient.from_env`'s environment-loading behavior.
+    `AnthropicClient.from_env`'s environment-loading behavior.
 
     Returns:
         The configured GOOGLE_OAUTH_CLIENT_ID value.

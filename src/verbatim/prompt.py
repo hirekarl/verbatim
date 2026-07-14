@@ -77,93 +77,87 @@ text response to signal that you are finished."""
 
 TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
-        "type": "function",
-        "function": {
-            "name": "create_suggestion",
-            "description": (
-                "Propose a suggested edit (Google Docs Suggest Changes mode) that "
-                "replaces an exact substring of the document with new text. Use "
-                "for rewrites: tone drift, readability, formatting/style, banned "
-                "words."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "matched_text": {
-                        "type": "string",
-                        "description": (
-                            "The EXACT, verbatim substring of the document body "
-                            "to replace, character-for-character. Must be unique "
-                            "in the document - pick enough surrounding context "
-                            "to disambiguate if the phrase repeats."
-                        ),
-                    },
-                    "replacement_text": {
-                        "type": "string",
-                        "description": "The full replacement text for matched_text.",
-                    },
-                    "rationale": {
-                        "type": "string",
-                        "description": (
-                            "One sentence: which of the 7 categories this fixes "
-                            "and why. Shown to the copywriter alongside the "
-                            "suggested edit."
-                        ),
-                    },
-                    "category": {
-                        "type": "string",
-                        "enum": CATEGORIES,
-                        "description": (
-                            "Which of the 7 audit categories this issue belongs to."
-                        ),
-                    },
+        "name": "create_suggestion",
+        "description": (
+            "Propose a suggested edit (Google Docs Suggest Changes mode) that "
+            "replaces an exact substring of the document with new text. Use "
+            "for rewrites: tone drift, readability, formatting/style, banned "
+            "words."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "matched_text": {
+                    "type": "string",
+                    "description": (
+                        "The EXACT, verbatim substring of the document body "
+                        "to replace, character-for-character. Must be unique "
+                        "in the document - pick enough surrounding context "
+                        "to disambiguate if the phrase repeats."
+                    ),
                 },
-                "required": [
-                    "matched_text",
-                    "replacement_text",
-                    "rationale",
-                    "category",
-                ],
+                "replacement_text": {
+                    "type": "string",
+                    "description": "The full replacement text for matched_text.",
+                },
+                "rationale": {
+                    "type": "string",
+                    "description": (
+                        "One sentence: which of the 7 categories this fixes "
+                        "and why. Shown to the copywriter alongside the "
+                        "suggested edit."
+                    ),
+                },
+                "category": {
+                    "type": "string",
+                    "enum": CATEGORIES,
+                    "description": (
+                        "Which of the 7 audit categories this issue belongs to."
+                    ),
+                },
             },
+            "required": [
+                "matched_text",
+                "replacement_text",
+                "rationale",
+                "category",
+            ],
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "create_inline_comment",
-            "description": (
-                "Attach an explanatory comment to an exact substring of the "
-                "document without proposing a specific rewrite. Use for "
-                "structural issues: paragraph order, CTA cadence, information "
-                "hierarchy."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "matched_text": {
-                        "type": "string",
-                        "description": (
-                            "The EXACT, verbatim substring this comment refers "
-                            "to. Must be unique in the document."
-                        ),
-                    },
-                    "comment": {
-                        "type": "string",
-                        "description": (
-                            "Constructive explanation shown to the copywriter: "
-                            "what the issue is and how to improve it."
-                        ),
-                    },
-                    "category": {
-                        "type": "string",
-                        "enum": CATEGORIES,
-                        "description": (
-                            "Which of the 7 audit categories this issue belongs to."
-                        ),
-                    },
+        "name": "create_inline_comment",
+        "description": (
+            "Attach an explanatory comment to an exact substring of the "
+            "document without proposing a specific rewrite. Use for "
+            "structural issues: paragraph order, CTA cadence, information "
+            "hierarchy."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "matched_text": {
+                    "type": "string",
+                    "description": (
+                        "The EXACT, verbatim substring this comment refers "
+                        "to. Must be unique in the document."
+                    ),
                 },
-                "required": ["matched_text", "comment", "category"],
+                "comment": {
+                    "type": "string",
+                    "description": (
+                        "Constructive explanation shown to the copywriter: "
+                        "what the issue is and how to improve it."
+                    ),
+                },
+                "category": {
+                    "type": "string",
+                    "enum": CATEGORIES,
+                    "description": (
+                        "Which of the 7 audit categories this issue belongs to."
+                    ),
+                },
             },
+            "required": ["matched_text", "comment", "category"],
         },
     },
 ]

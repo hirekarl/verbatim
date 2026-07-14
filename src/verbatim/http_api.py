@@ -22,10 +22,9 @@ from pydantic import BaseModel
 from verbatim.agent import run_agent
 from verbatim.brand_guidelines import BrandGuidelines
 from verbatim.docs_client import AuthenticationError, DocsClientError, GoogleDocsClient
-from verbatim.llm_client import LLMClientError, OpenRouterClient
+from verbatim.llm_client import DEFAULT_MODEL, AnthropicClient, LLMClientError
 from verbatim.token_validator import validate_access_token
 
-DEFAULT_MODEL = "google/gemini-2.5-flash"
 BACKEND_SECRET_HEADER = "X-Backend-Shared-Secret"
 
 _STATUS_BY_ERROR: dict[type[Exception], int] = {
@@ -83,7 +82,7 @@ def _get_expected_backend_secret() -> str:
     """Load the shared secret inbound requests must present, from the environment.
 
     Loads a `.env` file first, if one is present, mirroring
-    `OpenRouterClient.from_env`'s environment-loading behavior.
+    `AnthropicClient.from_env`'s environment-loading behavior.
 
     Returns:
         The configured BACKEND_SHARED_SECRET value.
@@ -196,7 +195,7 @@ def _check_shared_secret(x_backend_shared_secret: str | None) -> None:
 def _run_audit_job(
     job_id: str,
     docs_client: GoogleDocsClient,
-    llm_client: OpenRouterClient,
+    llm_client: AnthropicClient,
     brand_guidelines: BrandGuidelines,
     document_id: str,
     brief_id: str,
@@ -211,7 +210,7 @@ def _run_audit_job(
     Args:
         job_id: The id this job was submitted under.
         docs_client: The Google Docs/Drive client to audit with.
-        llm_client: The OpenRouter client to audit with.
+        llm_client: The Anthropic client to audit with.
         brand_guidelines: The brand guidelines to audit against.
         document_id: The draft document to audit.
         brief_id: The campaign brief document to audit against.
@@ -306,7 +305,7 @@ def audit(
         docs_client = GoogleDocsClient.from_access_token(
             credentials.credentials, include_drive=True
         )
-        llm_client = OpenRouterClient.from_env(model=request.model)
+        llm_client = AnthropicClient.from_env(model=request.model)
         brand_guidelines = BrandGuidelines(None)
     except (
         DocsClientError,

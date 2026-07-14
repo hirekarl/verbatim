@@ -29,8 +29,8 @@ class TestCLI:
 
     @pytest.fixture
     def mock_llm_client(self, mocker: MockerFixture) -> MagicMock:
-        """Mock the OpenRouterClient class and its from_env method."""
-        mock_cls = mocker.patch("verbatim.cli.OpenRouterClient")
+        """Mock the AnthropicClient class and its from_env method."""
+        mock_cls = mocker.patch("verbatim.cli.AnthropicClient")
         return cast(MagicMock, mock_cls.from_env)
 
     @pytest.fixture
@@ -274,7 +274,7 @@ class TestCLI:
             ],
             include_drive=True,
         )
-        mock_llm_client.assert_called_once_with(model="google/gemini-2.5-flash")
+        mock_llm_client.assert_called_once_with(model="claude-sonnet-5")
         mock_run_agent.assert_called_once_with(
             docs_client=mock_docs_client.return_value,
             llm_client=mock_llm_client.return_value,
@@ -285,7 +285,7 @@ class TestCLI:
         )
 
         captured = capsys.readouterr()
-        assert "LLM Model:       google/gemini-2.5-flash" in captured.out
+        assert "LLM Model:       claude-sonnet-5" in captured.out
         assert "Target Channel" not in captured.out
         assert "Max rounds cap hit: Yes (stopped early)" in captured.out
 

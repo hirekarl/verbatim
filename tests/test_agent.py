@@ -18,7 +18,7 @@ from verbatim.docs_client import (
     GoogleDocsClient,
     TextNotFoundError,
 )
-from verbatim.llm_client import ChatCompletionResult, OpenRouterClient, ToolCall
+from verbatim.llm_client import AnthropicClient, ChatCompletionResult, ToolCall
 from verbatim.orchestrator import _run_single_agent_loop
 from verbatim.prompts.line_editor import LINE_EDITOR_CATEGORIES
 from verbatim.prompts.shared import CATEGORIES
@@ -46,8 +46,8 @@ def docs_client() -> MagicMock:
 
 @pytest.fixture
 def llm_client() -> MagicMock:
-    """A fake OpenRouterClient; tests configure complete_chat's side effects."""
-    return MagicMock(spec=OpenRouterClient)
+    """A fake AnthropicClient; tests configure complete_chat's side effects."""
+    return MagicMock(spec=AnthropicClient)
 
 
 @pytest.fixture
@@ -60,7 +60,10 @@ def _no_tool_calls_result(content: str = "Audit complete.") -> ChatCompletionRes
     return ChatCompletionResult(
         content=content,
         tool_calls=[],
-        raw_assistant_message={"role": "assistant", "content": content},
+        raw_assistant_message={
+            "role": "assistant",
+            "content": [{"type": "text", "text": content}],
+        },
     )
 
 
@@ -68,7 +71,18 @@ def _tool_call_result(*tool_calls: ToolCall) -> ChatCompletionResult:
     return ChatCompletionResult(
         content=None,
         tool_calls=list(tool_calls),
-        raw_assistant_message={"role": "assistant", "tool_calls": []},
+        raw_assistant_message={
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": tc.id,
+                    "name": tc.name,
+                    "input": tc.arguments,
+                }
+                for tc in tool_calls
+            ],
+        },
     )
 
 
@@ -81,6 +95,38 @@ class TestRunSingleAgentLoop:
     error-handling, loop-control) are generic to the loop itself, not
     specific to either specialist agent.
     """
+
+    def test_seeds_the_conversation_with_an_initial_user_message(
+        self,
+        docs_client: MagicMock,
+        llm_client: MagicMock,
+    ) -> None:
+        """The first API call includes a user-role kickoff message.
+
+        Claude's Messages API rejects an empty `messages` list and requires
+        the first message to have role "user" -- unlike OpenAI's chat
+        completions, which allowed a request containing only the system
+        message. All conversational content still lives in `system_prompt`;
+        this is just the required kickoff turn. Caught by a live smoke test
+        against the real API, not by any pre-existing unit test, since
+        `complete_chat` is mocked everywhere else.
+        """
+        llm_client.complete_chat.return_value = _no_tool_calls_result()
+
+        _run_single_agent_loop(
+            docs_client=docs_client,
+            llm_client=llm_client,
+            document_id="doc-id",
+            system_prompt="System Prompt",
+            tool_schemas=STRUCTURAL_TOOL_SCHEMAS,
+            allowed_categories=CATEGORIES,
+        )
+
+        first_call_messages = llm_client.complete_chat.call_args_list[0].kwargs[
+            "messages"
+        ]
+        assert len(first_call_messages) >= 1
+        assert first_call_messages[0]["role"] == "user"
 
     def test_stops_immediately_when_the_model_makes_no_tool_calls(
         self,
@@ -298,9 +344,8 @@ class TestRunSingleAgentLoop:
         """A tool call omitting category still counts, under 'uncategorized'.
 
         The model isn't guaranteed to honor the schema's `required` list --
-        OpenRouter/OpenAI-style function calling doesn't hard-enforce it --
-        so a dispatched call missing `category` shouldn't crash or vanish
-        from the tally."""
+        the model's tool-calling doesn't hard-enforce it -- so a dispatched
+        call missing `category` shouldn't crash or vanish from the tally."""
         suggestion_call = ToolCall(
             id="call_1",
             name="create_suggestion",
@@ -573,8 +618,14 @@ class TestRunSingleAgentLoop:
         second_call_messages = llm_client.complete_chat.call_args_list[1].kwargs[
             "messages"
         ]
-        tool_messages = [m for m in second_call_messages if m.get("role") == "tool"]
-        assert any("not found" in m["content"] for m in tool_messages)
+        tool_result_blocks = [
+            block
+            for message in second_call_messages
+            if message.get("role") == "user" and isinstance(message["content"], list)
+            for block in message["content"]
+            if block.get("type") == "tool_result"
+        ]
+        assert any("not found" in block["content"] for block in tool_result_blocks)
 
     def test_unknown_tool_name_is_surfaced_to_the_model_without_crashing(
         self,
@@ -1033,7 +1084,7 @@ class TestRunAgentLineEditorResilience:
             _tool_call_result(comment_call),  # Structural round 1: one comment
             _no_tool_calls_result(),  # Structural round 2: done
         ]
-        # Line-Editor runs concurrently on its own OpenRouterClient instance
+        # Line-Editor runs concurrently on its own AnthropicClient instance
         # (agent.py's run_agent calls llm_client.new_instance() for it), not
         # the shared mock above -- its "nothing at all" response has to be
         # configured on that instance, or the default MagicMock stub's

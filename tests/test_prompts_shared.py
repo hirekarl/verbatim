@@ -3,8 +3,8 @@
 Written as the TDD red step ahead of `prompts/shared.py` existing -- see
 `MULTI_AGENT_PLAN.md`'s "Category validation" section for the rationale.
 `validate_category` is the enforcement point closing the gap where a tool
-call's `category` argument isn't hard-validated by OpenRouter/OpenAI-style
-function calling's JSON-schema `enum`.
+call's `category` argument isn't hard-validated by the model's tool-calling
+JSON-schema `enum`.
 """
 
 from verbatim.prompts.shared import (

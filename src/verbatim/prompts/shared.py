@@ -6,8 +6,8 @@ specialist agent module (`prompts/structural.py`, `prompts/line_editor.py`)
 defines its own narrower subset for its own tool schema's `category` enum.
 
 `validate_category` closes the gap where a tool call's `category` argument
-isn't hard-enforced: OpenRouter/OpenAI-style function calling doesn't
-validate a JSON-schema `enum` server-side, so a model can still return a
+isn't hard-enforced: the model's tool-calling doesn't validate a JSON-schema
+`enum` server-side, so a model can still return a
 `category` string that's missing, misspelled, or -- once split by
 specialist agent -- borrowed from the wrong agent's own allowed set. See
 `MULTI_AGENT_PLAN.md`'s "Category validation" section for the full
@@ -38,9 +38,8 @@ def validate_category(category: str | None, allowed: list[str]) -> str:
     ``category`` key missing entirely (``category`` is ``None``) and the key
     present but holding a value outside ``allowed`` -- misspelled, wrong
     casing, or borrowed from a different specialist agent's category set.
-    Neither failure mode is enforced server-side by OpenRouter/OpenAI-style
-    function calling's JSON-schema ``enum``, so this is the actual
-    enforcement point.
+    Neither failure mode is enforced server-side by the model's tool-calling
+    JSON-schema ``enum``, so this is the actual enforcement point.
 
     Args:
         category: The raw ``category`` argument from the tool call, or

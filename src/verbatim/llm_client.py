@@ -1,14 +1,13 @@
-"""OpenRouter LLM client: a thin wrapper around the OpenAI-compatible chat API."""
+"""Anthropic LLM client: a thin wrapper around the native Anthropic SDK."""
 
-import json
 import os
 from dataclasses import dataclass
 from typing import Any, cast
 
+import anthropic
 from dotenv import load_dotenv
-from openai import OpenAI, OpenAIError
 
-DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_MODEL = "claude-sonnet-5"
 
 
 class LLMClientError(Exception):
@@ -16,7 +15,7 @@ class LLMClientError(Exception):
 
 
 class MissingAPIKeyError(LLMClientError):
-    """Raised when OPENROUTER_API_KEY is not set in the environment."""
+    """Raised when ANTHROPIC_API_KEY is not set in the environment."""
 
 
 @dataclass(frozen=True)
@@ -37,116 +36,122 @@ class ChatCompletionResult:
     raw_assistant_message: dict[str, Any]
 
 
-class OpenRouterClient:
-    """A chat-completions client targeting OpenRouter via the OpenAI SDK."""
+class AnthropicClient:
+    """A chat-completions client targeting the native Anthropic Messages API."""
 
-    def __init__(
-        self, api_key: str, model: str, base_url: str = DEFAULT_BASE_URL
-    ) -> None:
-        """Build a client for the given model, authenticated against OpenRouter.
+    def __init__(self, api_key: str, model: str) -> None:
+        """Build a client for the given model, authenticated against Anthropic.
 
         Args:
-            api_key: The OpenRouter API key.
-            model: The OpenRouter model identifier to request completions from.
-            base_url: The OpenAI-compatible API base URL. Defaults to
-                OpenRouter's endpoint.
+            api_key: The Anthropic API key.
+            model: The Claude model identifier to request completions from.
         """
         self._api_key = api_key
-        self._base_url = base_url
-        self._client = OpenAI(api_key=api_key, base_url=base_url)
+        self._client = anthropic.Anthropic(api_key=api_key)
         self._model = model
 
     @classmethod
-    def from_env(cls, model: str) -> "OpenRouterClient":
-        """Build a client using the OPENROUTER_API_KEY environment variable.
+    def from_env(cls, model: str) -> "AnthropicClient":
+        """Build a client using the ANTHROPIC_API_KEY environment variable.
 
         Loads a `.env` file first, if one is present (without overriding any
-        already-exported environment variable), so OPENROUTER_API_KEY can be
+        already-exported environment variable), so ANTHROPIC_API_KEY can be
         set either way.
 
         Args:
-            model: The OpenRouter model identifier to request completions from.
+            model: The Claude model identifier to request completions from.
 
         Returns:
-            An OpenRouterClient authenticated with the environment's API key.
+            An AnthropicClient authenticated with the environment's API key.
 
         Raises:
-            MissingAPIKeyError: OPENROUTER_API_KEY is not set.
+            MissingAPIKeyError: ANTHROPIC_API_KEY is not set.
         """
         load_dotenv()
-        api_key = os.environ.get("OPENROUTER_API_KEY")
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
             raise MissingAPIKeyError(
-                "OPENROUTER_API_KEY environment variable is not set"
+                "ANTHROPIC_API_KEY environment variable is not set"
             )
         return cls(api_key=api_key, model=model)
 
-    def new_instance(self) -> "OpenRouterClient":
+    def new_instance(self) -> "AnthropicClient":
         """Build a second, independent client sharing this one's credentials.
 
         Phase 2 concurrent dispatch runs the Structural and Line-Editor
         specialist agents on separate threads; each gets its own SDK client
         object rather than sharing one across threads.
         """
-        return OpenRouterClient(
-            api_key=self._api_key, model=self._model, base_url=self._base_url
-        )
+        return AnthropicClient(api_key=self._api_key, model=self._model)
 
     def complete_chat(
         self,
+        system: str,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
-        max_tokens: int | None = 4096,
+        max_tokens: int = 4096,
     ) -> ChatCompletionResult:
         """Run one chat-completion request/response round.
 
         Args:
-            messages: The conversation so far, in OpenAI chat message format.
-            tools: The function-calling tool schemas the model may invoke.
-            max_tokens: The maximum number of tokens to generate. Defaults to 4096.
+            system: The system prompt for this conversation. Anthropic takes
+                this as a top-level request parameter, not a message with
+                role "system" -- see orchestrator.py's message-building.
+            messages: The conversation so far, in Anthropic Messages API
+                format (``role`` of "user"/"assistant" only).
+            tools: The tool schemas the model may invoke, in Anthropic's flat
+                ``input_schema`` shape.
+            max_tokens: The maximum number of tokens to generate. Defaults to
+                4096.
 
         Returns:
             The response content (if any) and any tool calls the model made.
 
         Raises:
-            LLMClientError: The request failed, or a tool call's arguments
-                weren't valid JSON.
+            LLMClientError: The request failed.
         """
         try:
-            response = self._client.chat.completions.create(
+            response = self._client.messages.create(
                 model=self._model,
+                max_tokens=max_tokens,
+                system=system,
                 messages=cast(Any, messages),
                 tools=cast(Any, tools),
-                max_tokens=max_tokens,
             )
-        except OpenAIError as err:
+        except anthropic.APIConnectionError as err:
             raise LLMClientError(
-                f"OpenRouter chat completion request failed: {err}"
+                f"Anthropic chat completion request failed: network error: {err}"
+            ) from err
+        except anthropic.RateLimitError as err:
+            raise LLMClientError(
+                f"Anthropic chat completion request failed: rate limited: {err}"
+            ) from err
+        except anthropic.APIStatusError as err:
+            raise LLMClientError(
+                f"Anthropic chat completion request failed: {err}"
             ) from err
 
-        message = response.choices[0].message
+        content: str | None = None
         tool_calls: list[ToolCall] = []
-        # Only function-type tool calls are supported; TOOL_SCHEMAS never
-        # declares custom tools, so the SDK's other tool-call variant is
-        # never actually returned here.
-        for tool_call in cast(list[Any], message.tool_calls or []):
-            try:
-                arguments = json.loads(tool_call.function.arguments)
-            except json.JSONDecodeError as err:
-                raise LLMClientError(
-                    "Model returned malformed tool-call arguments for "
-                    f"{tool_call.function.name}"
-                ) from err
-            tool_calls.append(
-                ToolCall(
-                    id=tool_call.id,
-                    name=tool_call.function.name,
-                    arguments=arguments,
+        for block in response.content:
+            if block.type == "text":
+                content = block.text
+            elif block.type == "tool_use":
+                tool_calls.append(
+                    ToolCall(
+                        id=block.id,
+                        name=block.name,
+                        arguments=cast(dict[str, Any], block.input),
+                    )
                 )
-            )
 
         return ChatCompletionResult(
-            content=message.content,
+            content=content,
             tool_calls=tool_calls,
-            raw_assistant_message=message.model_dump(exclude_none=True),
+            raw_assistant_message={
+                "role": "assistant",
+                "content": [
+                    block.model_dump(exclude_none=True) for block in response.content
+                ],
+            },
         )

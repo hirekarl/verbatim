@@ -144,43 +144,40 @@ Termination Conditions:
 
 STRUCTURAL_TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
-        "type": "function",
-        "function": {
-            "name": "create_inline_comment",
-            "description": (
-                "Attach an explanatory comment to an exact substring of the "
-                "document without proposing a specific rewrite. Use for "
-                "structural issues: paragraph order, CTA cadence, information "
-                "hierarchy."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "matched_text": {
-                        "type": "string",
-                        "description": (
-                            "The EXACT, verbatim substring this comment refers "
-                            "to. Must be unique in the document."
-                        ),
-                    },
-                    "comment": {
-                        "type": "string",
-                        "description": (
-                            "Constructive explanation shown to the copywriter: "
-                            "what the structural issue is and how to improve it."
-                        ),
-                    },
-                    "category": {
-                        "type": "string",
-                        "enum": STRUCTURAL_CATEGORIES,
-                        "description": (
-                            "Which structural category this issue belongs to: "
-                            "information_hierarchy or cta_cadence."
-                        ),
-                    },
+        "name": "create_inline_comment",
+        "description": (
+            "Attach an explanatory comment to an exact substring of the "
+            "document without proposing a specific rewrite. Use for "
+            "structural issues: paragraph order, CTA cadence, information "
+            "hierarchy."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "matched_text": {
+                    "type": "string",
+                    "description": (
+                        "The EXACT, verbatim substring this comment refers "
+                        "to. Must be unique in the document."
+                    ),
                 },
-                "required": ["matched_text", "comment", "category"],
+                "comment": {
+                    "type": "string",
+                    "description": (
+                        "Constructive explanation shown to the copywriter: "
+                        "what the structural issue is and how to improve it."
+                    ),
+                },
+                "category": {
+                    "type": "string",
+                    "enum": STRUCTURAL_CATEGORIES,
+                    "description": (
+                        "Which structural category this issue belongs to: "
+                        "information_hierarchy or cta_cadence."
+                    ),
+                },
             },
+            "required": ["matched_text", "comment", "category"],
         },
     },
 ]

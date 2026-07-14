@@ -7,7 +7,7 @@ from typing import Any, Literal
 from verbatim.brand_guidelines import BrandGuidelines
 from verbatim.docs_client import CampaignContext, DocumentContent, GoogleDocsClient
 from verbatim.evaluator import BrandGuidelinesEvaluator, Violation
-from verbatim.llm_client import OpenRouterClient
+from verbatim.llm_client import AnthropicClient
 from verbatim.prompt import TOOL_SCHEMAS, build_system_prompt
 from verbatim.prompts.line_editor import (
     LINE_EDITOR_CATEGORIES,
@@ -148,7 +148,7 @@ def _fetch_shared_context(
 
 def run_agent(
     docs_client: GoogleDocsClient,
-    llm_client: OpenRouterClient,
+    llm_client: AnthropicClient,
     document_id: str,
     brief_id: str,
     brand_guidelines: BrandGuidelines,
@@ -162,7 +162,7 @@ def run_agent(
     Cadence, comment-only) and the Line-Editor agent (Tone Drift +
     Readability, suggestion-only) concurrently on separate threads -- Phase
     2's dispatch per `MULTI_AGENT_PLAN.md`. Each specialist gets its own
-    ``OpenRouterClient`` instance; ``docs_client``'s write methods hold their
+    ``AnthropicClient`` instance; ``docs_client``'s write methods hold their
     own lock, so it's safe to share across both.
 
     Both futures are always awaited, so one specialist's exception can never
@@ -176,7 +176,7 @@ def run_agent(
 
     Args:
         docs_client: An authenticated GoogleDocsClient with write access.
-        llm_client: An OpenRouterClient to run the Structural agent's
+        llm_client: An AnthropicClient to run the Structural agent's
             conversation on; the Line-Editor agent gets its own via
             ``llm_client.new_instance()``.
         document_id: The Google Docs document ID to audit.
@@ -261,7 +261,7 @@ def run_agent(
 
 def run_agent_legacy(
     docs_client: GoogleDocsClient,
-    llm_client: OpenRouterClient,
+    llm_client: AnthropicClient,
     document_id: str,
     brief_id: str,
     brand_guidelines: BrandGuidelines,
@@ -279,7 +279,7 @@ def run_agent_legacy(
 
     Args:
         docs_client: An authenticated GoogleDocsClient with write access.
-        llm_client: An OpenRouterClient to run the audit conversation on.
+        llm_client: An AnthropicClient to run the audit conversation on.
         document_id: The Google Docs document ID to audit.
         brief_id: The Google Docs document ID of the campaign brief.
         brand_guidelines: The brand guidelines to inject into the prompt.

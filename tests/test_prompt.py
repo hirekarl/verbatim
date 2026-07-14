@@ -181,49 +181,45 @@ class TestBuildSystemPrompt:
 
 
 class TestToolSchemas:
-    """Tests for the TOOL_SCHEMAS function-calling definitions."""
+    """Tests for the TOOL_SCHEMAS Claude tool-use definitions."""
 
     def test_defines_exactly_the_two_write_tools(self) -> None:
         """Only create_suggestion and create_inline_comment are exposed."""
-        names = {schema["function"]["name"] for schema in TOOL_SCHEMAS}
+        names = {schema["name"] for schema in TOOL_SCHEMAS}
 
         assert names == {"create_suggestion", "create_inline_comment"}
 
     def test_create_suggestion_requires_matched_text_and_replacement_text(self) -> None:
         """create_suggestion's schema requires the fields the dispatcher needs."""
-        schema = next(
-            s for s in TOOL_SCHEMAS if s["function"]["name"] == "create_suggestion"
-        )
+        schema = next(s for s in TOOL_SCHEMAS if s["name"] == "create_suggestion")
 
-        required = schema["function"]["parameters"]["required"]
+        required = schema["input_schema"]["required"]
 
         assert "matched_text" in required
         assert "replacement_text" in required
 
     def test_create_inline_comment_requires_matched_text_and_comment(self) -> None:
         """create_inline_comment's schema requires the fields the dispatcher needs."""
-        schema = next(
-            s for s in TOOL_SCHEMAS if s["function"]["name"] == "create_inline_comment"
-        )
+        schema = next(s for s in TOOL_SCHEMAS if s["name"] == "create_inline_comment")
 
-        required = schema["function"]["parameters"]["required"]
+        required = schema["input_schema"]["required"]
 
         assert "matched_text" in required
         assert "comment" in required
 
-    def test_all_schemas_are_type_function(self) -> None:
-        """Every schema uses the OpenAI function-calling tool type."""
-        assert all(schema["type"] == "function" for schema in TOOL_SCHEMAS)
+    def test_all_schemas_use_the_flat_claude_tool_shape(self) -> None:
+        """Every schema is flat -- no OpenAI-style type/function wrapper."""
+        assert all("type" not in schema for schema in TOOL_SCHEMAS)
+        assert all("function" not in schema for schema in TOOL_SCHEMAS)
+        assert all("input_schema" in schema for schema in TOOL_SCHEMAS)
 
     def test_create_suggestion_requires_category_from_the_seven_categories(
         self,
     ) -> None:
         """create_suggestion's schema requires a category enum field."""
-        schema = next(
-            s for s in TOOL_SCHEMAS if s["function"]["name"] == "create_suggestion"
-        )
-        properties = schema["function"]["parameters"]["properties"]
-        required = schema["function"]["parameters"]["required"]
+        schema = next(s for s in TOOL_SCHEMAS if s["name"] == "create_suggestion")
+        properties = schema["input_schema"]["properties"]
+        required = schema["input_schema"]["required"]
 
         assert "category" in required
         assert properties["category"]["enum"] == CATEGORIES
@@ -232,11 +228,9 @@ class TestToolSchemas:
         self,
     ) -> None:
         """create_inline_comment's schema requires a category enum field."""
-        schema = next(
-            s for s in TOOL_SCHEMAS if s["function"]["name"] == "create_inline_comment"
-        )
-        properties = schema["function"]["parameters"]["properties"]
-        required = schema["function"]["parameters"]["required"]
+        schema = next(s for s in TOOL_SCHEMAS if s["name"] == "create_inline_comment")
+        properties = schema["input_schema"]["properties"]
+        required = schema["input_schema"]["required"]
 
         assert "category" in required
         assert properties["category"]["enum"] == CATEGORIES
