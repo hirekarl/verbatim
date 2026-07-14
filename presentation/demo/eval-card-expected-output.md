@@ -27,7 +27,7 @@ Adversarial input. The draft is written to have obvious, dense readability probl
 This fixture can't produce the adversarial condition on its own — the PRD scenario is the Line-Editor agent returning zero tool calls entirely (simulating a transient LLM failure or empty response), which has to be forced rather than triggered by document content. Use this doc for two separate runs:
 
 - A normal run, to confirm the Line-Editor agent's readability findings look reasonable against genuinely bad prose (this is also the Tue Jul 14 validation input for `prompts/line_editor.py`).
-- A mocked run with the Line-Editor agent's tool-calling loop forced to return zero tool calls (patch `OpenRouterClient`/the loop's response at the `orchestrator` boundary), to confirm the orchestrator still returns a valid `AgentRunResult` built from whatever the Structural agent found (the paragraph-3 CTA comment), the run doesn't crash, and the gap shows up as zero `readability` findings in `category_counts` rather than being silently dropped.
+- A mocked run with the Line-Editor agent's tool-calling loop forced to return zero tool calls (patch `AnthropicClient`/the loop's response at the `orchestrator` boundary), to confirm the orchestrator still returns a valid `AgentRunResult` built from whatever the Structural agent found (the paragraph-3 CTA comment), the run doesn't crash, and the gap shows up as zero `readability` findings in `category_counts` rather than being silently dropped.
 
 ## Rehearsal note
 
