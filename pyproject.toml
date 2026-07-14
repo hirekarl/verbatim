@@ -1,6 +1,6 @@
 [project]
 name = "verbatim"
-version = "0.15.0"
+version = "0.15.1"
 description = "An AI agent that audits marketing copy in Google Docs against brand guidelines and campaign briefs."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

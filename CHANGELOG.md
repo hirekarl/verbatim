@@ -1,3 +1,9 @@
+## v0.15.1 (2026-07-14)
+
+### Fix
+
+- **llm**: force IPv4-only egress and log the raw exception on LLM call failure
+
 ## v0.15.0 (2026-07-14)
 
 ### Feat
