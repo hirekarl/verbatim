@@ -52,7 +52,7 @@ Two things landed today outside the Eval Card validation task above, in Karl-own
 
 ### Wed Jul 15
 
-- [x] **Karl**: Phase 2 concurrency — `ThreadPoolExecutor` dispatch, `docs_client.py` write lock, two independent `OpenRouterClient` instances, concurrency test. *(#62, plus follow-up fix for a fail-fast result-discarding bug — PR #66, open)*
+- [x] **Karl**: Phase 2 concurrency — `ThreadPoolExecutor` dispatch, `docs_client.py` write lock, two independent `OpenRouterClient` instances, concurrency test. *(#62, plus follow-up fix for a fail-fast result-discarding bug — PR #66, merged)*
 - [ ] **Christina**: final coverage pass on `tests/test_prompts_structural.py`. *(Pulled up from the Thu Jul 16 slot below — Tue Jul 14's Eval Card sync closed out, this is unblocked, and it's squarely in her existing `structural.py` domain. Her originally-planned Wed Jul 15 task, the `formatting_and_style` title/sentence-case check ([#11](https://github.com/hirekarl/verbatim/issues/11)), already shipped in PR #40 on Jul 9, before this sprint plan was written — caught during PR #46 review.)*
 
 ### Thu Jul 16 — buffer/polish, feature-complete
