@@ -39,7 +39,7 @@ Christina's exploration of `shared.py` while starting her `structural.py` work s
 
 ### Tue Jul 14 — Eval Card validation, split by agent ownership
 
-- [ ] **Christina**: run golden/edge/adversarial fixtures (+ `presentation/demo/*`) against the Structural agent (Info Hierarchy + CTA Cadence); fix anything found in `prompts/structural.py`. *(in progress — PR #64, `fix/structural-prompt-category-clarity`)*
+- [x] **Christina**: run golden/edge/adversarial fixtures (+ `presentation/demo/*`) against the Structural agent (Info Hierarchy + CTA Cadence); fix anything found in `prompts/structural.py`. *(PR #64 merged, fixed fragmentation + domain-overlap false positive. The remaining golden-edge category-tiebreaker bug, [#69](https://github.com/hirekarl/verbatim/issues/69), got two follow-up attempts — PR #70 and PR #72 — both closed unmerged after validation showed neither reliably resolved it. Deferred post-demo; see #69 for the call and rationale.)*
 - [x] **Karl**: same for the Line-Editor agent (Tone Drift + Readability) in `prompts/line_editor.py`. *(#61)*
 - [x] **Both**: end-of-day sync — go/no-go call on flipping `run_agent()`'s default to the new split. *(flipped — `run_agent()` dispatches the Structural/Line-Editor split by default)*
 
