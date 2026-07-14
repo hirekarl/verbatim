@@ -22,7 +22,7 @@ Verbatim is an AI agent that reviews draft marketing copy inside Google Docs aga
     - [Development workflow](#development-workflow)
   - [Integrations](#integrations)
     - [Google Docs API setup](#google-docs-api-setup)
-    - [Agent (OpenRouter) setup](#agent-openrouter-setup)
+    - [Agent (Anthropic) setup](#agent-anthropic-setup)
   - [Usage](#usage)
     - [CLI usage](#cli-usage)
   - [Reference](#reference)
@@ -57,7 +57,7 @@ flowchart TD
     M --> N[Draft goes on for strategic sign-off]
 ```
 
-The evaluator and the two specialist agents cover different slices of the 7 audit categories. `BrandGuidelinesEvaluator` handles the mechanically-checkable ones (banned words, formatting/style mechanics, channel constraints) with plain regex — its findings aren't discarded, they're injected into both agents' system prompts as pre-verified, citable evidence. Of the four subjective categories left, the **Structural agent** judges information hierarchy and CTA cadence (whole-document, paragraph-ordering reasoning) and can only call `create_inline_comment` — no rewrite tool — since those issues call for reorganizing, not replacing, text. The **Line-Editor agent** judges tone drift and readability (local, sentence-level rewrites) and can only call `create_suggestion` — no comment tool. Restricting each agent to one tool turns what used to be a soft per-category tool *preference* into a hard constraint neither agent can violate. `agent.py`'s `run_agent()` dispatches the two on a `ThreadPoolExecutor` (each with its own `OpenRouterClient` instance) and merges their results with `orchestrator.reconcile_findings`; `docs_client.py`'s write methods hold their own lock, since both specialists can end up writing to the same document from separate threads at once. Exception handling is fail-fast — if either specialist's thread raises, that exception propagates immediately and the other's result is discarded rather than partially reconciled. The original single-prompt, single-loop implementation is kept as `run_agent_legacy` for comparison. Full rationale: [`MULTI_AGENT_PLAN.md`](MULTI_AGENT_PLAN.md).
+The evaluator and the two specialist agents cover different slices of the 7 audit categories. `BrandGuidelinesEvaluator` handles the mechanically-checkable ones (banned words, formatting/style mechanics, channel constraints) with plain regex — its findings aren't discarded, they're injected into both agents' system prompts as pre-verified, citable evidence. Of the four subjective categories left, the **Structural agent** judges information hierarchy and CTA cadence (whole-document, paragraph-ordering reasoning) and can only call `create_inline_comment` — no rewrite tool — since those issues call for reorganizing, not replacing, text. The **Line-Editor agent** judges tone drift and readability (local, sentence-level rewrites) and can only call `create_suggestion` — no comment tool. Restricting each agent to one tool turns what used to be a soft per-category tool *preference* into a hard constraint neither agent can violate. `agent.py`'s `run_agent()` dispatches the two on a `ThreadPoolExecutor` (each with its own `AnthropicClient` instance) and merges their results with `orchestrator.reconcile_findings`; `docs_client.py`'s write methods hold their own lock, since both specialists can end up writing to the same document from separate threads at once. Exception handling is fail-fast — if either specialist's thread raises, that exception propagates immediately and the other's result is discarded rather than partially reconciled. The original single-prompt, single-loop implementation is kept as `run_agent_legacy` for comparison. Full rationale: [`MULTI_AGENT_PLAN.md`](MULTI_AGENT_PLAN.md).
 
 ### Design notes
 
@@ -65,7 +65,7 @@ A few things about how this was built that might be worth stealing if you're bui
 
 - **Deterministic + LLM hybrid, not LLM-only.** Regex doesn't hallucinate a banned-word match, so `BrandGuidelinesEvaluator` handles every category that's pure pattern-matching without a model call at all. Its findings aren't discarded once computed — they're injected into the LLM's system prompt as pre-verified, citable evidence, so the model spends its judgment budget only on the four genuinely subjective categories instead of re-deriving mechanical checks a regex already nailed. Cheaper, faster, and more reliable than routing everything through the model.
 - **The default guidelines are a real style guide, not a toy fixture.** `src/verbatim/data/brand_guidelines.json` is a synthesis of [Mailchimp's public Content Style Guide](https://styleguide.mailchimp.com/) — not a claim about Mailchimp's actual internal rules, just realistic, non-synthetic brand voice/style data to build and demo against. Point `-g/--guidelines` at a different file to audit against a different brand.
-- **A knowledge base written for the coding agent, not just the team.** `.knowledge-base/` decomposes the Google Docs/Drive/OpenRouter REST references into map-and-leaf files (one `MAP.md` index plus a focused leaf per resource, each with a real request/response example and a "Gotchas" section). It exists so an AI coding agent implementing `docs_client.py` doesn't have to re-fetch Google's live docs — or worse, hallucinate a plausible-looking field name — every session. Scoped strictly to endpoints actually called; a new endpoint gets a new leaf rather than a cold read of the live reference.
+- **A knowledge base written for the coding agent, not just the team.** `.knowledge-base/` decomposes the Google Docs/Drive/Anthropic REST references into map-and-leaf files (one `MAP.md` index plus a focused leaf per resource, each with a real request/response example and a "Gotchas" section). It exists so an AI coding agent implementing `docs_client.py` doesn't have to re-fetch Google's live docs — or worse, hallucinate a plausible-looking field name — every session. Scoped strictly to endpoints actually called; a new endpoint gets a new leaf rather than a cold read of the live reference.
 - **"Suggested edit" requires Suggester access, not Editor.** `create_suggestion` only lands as a reviewable suggestion — the entire point, since nothing should reach the document unreviewed — if the authenticated account has Commenter/Suggester (not Editor) permission on the target doc. Editor access makes the identical API call apply the edit directly and silently instead. Found by testing against a live doc; it isn't called out anywhere obvious in Google's docs.
 - **The narrower Drive scope 404s on this project's exact use case.** `drive.file` only covers files the app itself created or the user picked via a file picker — it 404s on `comments.create` for a doc a copywriter just opens by link, which is Verbatim's whole workflow. `WRITE_SCOPES` requests the broader `drive` scope instead, confirmed live rather than assumed from the scope reference.
 
@@ -177,11 +177,11 @@ This project follows **test-driven development**: write a failing test before wr
 
 See `.knowledge-base/google-docs-api/` and `.knowledge-base/google-drive-api/` for decomposed reference docs on the underlying REST APIs.
 
-### Agent (OpenRouter) setup
+### Agent (Anthropic) setup
 
-`src/verbatim/llm_client.py` runs the audit conversation through [OpenRouter](https://openrouter.ai/)'s OpenAI-compatible chat completions API.
+`src/verbatim/llm_client.py` runs the audit conversation through [Anthropic](https://www.anthropic.com/)'s native Messages API.
 
-1. Create an OpenRouter account and generate an API key.
+1. Create an Anthropic account (console.anthropic.com) and generate an API key.
 
 1. Copy `.env.example` to `.env` and fill in your key:
 
@@ -189,13 +189,13 @@ See `.knowledge-base/google-docs-api/` and `.knowledge-base/google-drive-api/` f
    cp .env.example .env
    ```
 
-   `OpenRouterClient.from_env(...)` loads `.env` automatically (it's git-ignored — never commit it). Alternatively, export the variable in your shell instead:
+   `AnthropicClient.from_env(...)` loads `.env` automatically (it's git-ignored — never commit it). Alternatively, export the variable in your shell instead:
 
    ```sh
-   export OPENROUTER_API_KEY="sk-or-..."
+   export ANTHROPIC_API_KEY="sk-ant-..."
    ```
 
-   On Windows PowerShell: `$env:OPENROUTER_API_KEY = "sk-or-..."`.
+   On Windows PowerShell: `$env:ANTHROPIC_API_KEY = "sk-ant-..."`.
 
 ## Usage
 
@@ -210,7 +210,7 @@ uv run verbatim <document_id> <brief_id> [options]
 #### Options
 
 - `-c, --channel`: Optional target marketing channel (e.g. `email`, `blog`, `twitter`). If set, activates channel-specific rules in the evaluator.
-- `-m, --model`: OpenRouter model identifier (defaults to `google/gemini-2.5-flash`).
+- `-m, --model`: Claude model identifier (defaults to `claude-sonnet-5`).
 - `-g, --guidelines`: Optional custom path to a `brand_guidelines.json` file.
 
 Example:
@@ -227,7 +227,7 @@ The same audit logic is also exposed over HTTP, as the backend for the Workspace
 uv run verbatim-server
 ```
 
-This requires `GOOGLE_OAUTH_CLIENT_ID` to be set (alongside `OPENROUTER_API_KEY`, in the same `.env`) — the OAuth client ID inbound bearer tokens are expected to carry as their audience, checked against Google's tokeninfo endpoint before any request is trusted. See `src/verbatim/token_validator.py`.
+This requires `GOOGLE_OAUTH_CLIENT_ID` to be set (alongside `ANTHROPIC_API_KEY`, in the same `.env`) — the OAuth client ID inbound bearer tokens are expected to carry as their audience, checked against Google's tokeninfo endpoint before any request is trusted. See `src/verbatim/token_validator.py`.
 
 This starts a FastAPI app (via uvicorn) on `PORT` (default `8080`) with a single route:
 
@@ -264,7 +264,7 @@ verbatim/
 │   ├── docs_client.py      # Google Docs/Drive API auth + read/write tool wrappers
 │   ├── evaluator.py        # BrandGuidelinesEvaluator: checks text against brand rules
 │   ├── http_api.py         # FastAPI HTTP entrypoint (hosted Workspace Add-on backend)
-│   ├── llm_client.py       # OpenRouter chat-completions client
+│   ├── llm_client.py       # Anthropic Messages API client
 │   ├── prompt.py           # legacy single-agent system prompt + tool schemas
 │   ├── prompts/            # per-specialist-agent prompt assembly + tool schemas
 │   │   ├── shared.py       # CATEGORIES, validate_category() -- shared by every agent
@@ -294,7 +294,7 @@ verbatim/
 ├── .knowledge-base/        # decomposed reference docs for external APIs (map-and-leaf)
 
 ├── docs/                   # PRD and research reference docs (.docx + Markdown snapshots)
-├── .env.example            # OPENROUTER_API_KEY/GOOGLE_OAUTH_CLIENT_ID template; copy to .env (git-ignored)
+├── .env.example            # ANTHROPIC_API_KEY/GOOGLE_OAUTH_CLIENT_ID template; copy to .env (git-ignored)
 ├── .dockerignore
 ├── BOOTSTRAPPING.md        # scaffolding rationale and remaining setup work
 ├── CLAUDE.md               # project context for AI coding agents

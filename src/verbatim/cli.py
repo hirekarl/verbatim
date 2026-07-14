@@ -7,7 +7,7 @@ from pathlib import Path
 from verbatim.agent import Finding, run_agent
 from verbatim.brand_guidelines import BrandGuidelines
 from verbatim.docs_client import WRITE_SCOPES, DocsClientError, GoogleDocsClient
-from verbatim.llm_client import LLMClientError, OpenRouterClient
+from verbatim.llm_client import DEFAULT_MODEL, AnthropicClient, LLMClientError
 from verbatim.prompt import CATEGORY_LABELS
 
 
@@ -44,8 +44,8 @@ def main(args: list[str] | None = None) -> None:
         "-m",
         "--model",
         type=str,
-        default="google/gemini-2.5-flash",
-        help="OpenRouter model identifier (default: google/gemini-2.5-flash).",
+        default=DEFAULT_MODEL,
+        help=f"Claude model identifier (default: {DEFAULT_MODEL}).",
     )
     parser.add_argument(
         "-g",
@@ -69,7 +69,7 @@ def main(args: list[str] | None = None) -> None:
             scopes=WRITE_SCOPES,
             include_drive=True,
         )
-        llm_client = OpenRouterClient.from_env(model=parsed_args.model)
+        llm_client = AnthropicClient.from_env(model=parsed_args.model)
 
         print("Starting audit run...")
         print(f"Document ID:     {parsed_args.document_id}")

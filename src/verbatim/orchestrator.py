@@ -4,7 +4,7 @@ from typing import Any
 
 from verbatim.agent import AgentRunResult, Finding
 from verbatim.docs_client import DocsClientError, GoogleDocsClient
-from verbatim.llm_client import OpenRouterClient, ToolCall
+from verbatim.llm_client import AnthropicClient, ToolCall
 from verbatim.prompts.shared import validate_category
 
 
@@ -35,8 +35,8 @@ def _dispatch_tool_call(
         made, finding). ``finding`` is set on a real successful dispatch, or
         ``None`` on any skip/error/unknown-tool branch. Neither the schema's
         ``required`` list nor its ``category`` ``enum`` is hard-enforced by
-        OpenRouter/OpenAI-style function calling, so a dispatched call's
-        ``category`` is run through ``validate_category`` against
+        the model's tool-calling, so a dispatched call's ``category`` is run
+        through ``validate_category`` against
         ``allowed_categories`` -- missing or not one of the caller's allowed
         categories both fall back to ``"uncategorized"`` -- and a call
         missing ``rationale`` falls back to an empty detail, rather than
@@ -101,7 +101,7 @@ def _dispatch_tool_call(
 
 def _run_single_agent_loop(
     docs_client: GoogleDocsClient,
-    llm_client: OpenRouterClient,
+    llm_client: AnthropicClient,
     document_id: str,
     system_prompt: str,
     tool_schemas: list[dict[str, Any]],
@@ -116,9 +116,12 @@ def _run_single_agent_loop(
 
     Args:
         docs_client: An authenticated GoogleDocsClient with write access.
-        llm_client: An OpenRouterClient to run the audit conversation on.
+        llm_client: An AnthropicClient to run the audit conversation on.
         document_id: The Google Docs document ID being audited.
-        system_prompt: The specialist agent's assembled system prompt.
+        system_prompt: The specialist agent's assembled system prompt. Passed
+            straight through to the Anthropic Messages API's top-level
+            ``system`` parameter -- unlike OpenAI-style chat completions, it
+            is never a message in ``messages`` itself.
         tool_schemas: The specialist agent's restricted tool schema set.
         allowed_categories: This agent's own category vocabulary --
             ``STRUCTURAL_CATEGORIES`` or ``LINE_EDITOR_CATEGORIES``, not the
@@ -132,7 +135,14 @@ def _run_single_agent_loop(
     Returns:
         The outcome of this specialist agent's audit pass.
     """
-    messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+    # Claude's Messages API rejects an empty `messages` list and requires the
+    # first message to have role "user" -- unlike OpenAI-style chat
+    # completions, which allowed a request carrying only the system message.
+    # All of this agent's actual instructions/context live in system_prompt;
+    # this is just the required kickoff turn.
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": "Begin your audit of the document."}
+    ]
     suggestions_made = 0
     comments_made = 0
     category_counts: dict[str, int] = {}
@@ -145,13 +155,20 @@ def _run_single_agent_loop(
     seen_spans: set[tuple[str, str]] = set()
 
     for _round in range(max_tool_call_rounds):
-        result = llm_client.complete_chat(messages=messages, tools=tool_schemas)
+        result = llm_client.complete_chat(
+            system=system_prompt, messages=messages, tools=tool_schemas
+        )
         messages.append(result.raw_assistant_message)
 
         if not result.tool_calls:
             stopped_due_to_max_rounds = False
             break
 
+        # All tool_result blocks produced from one assistant turn's tool
+        # calls must land in a single user-role message -- returning them
+        # across separate messages silently trains Claude to stop making
+        # parallel tool calls.
+        tool_results: list[dict[str, Any]] = []
         for tool_call in result.tool_calls:
             outcome, made_suggestion, made_comment, finding = _dispatch_tool_call(
                 docs_client, document_id, tool_call, seen_spans, allowed_categories
@@ -163,13 +180,14 @@ def _run_single_agent_loop(
                     category_counts.get(finding.category, 0) + 1
                 )
                 findings.append(finding)
-            messages.append(
+            tool_results.append(
                 {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
+                    "type": "tool_result",
+                    "tool_use_id": tool_call.id,
                     "content": outcome,
                 }
             )
+        messages.append({"role": "user", "content": tool_results})
 
     return AgentRunResult(
         suggestions_made=suggestions_made,

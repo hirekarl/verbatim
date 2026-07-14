@@ -70,54 +70,51 @@ Termination Conditions:
 
 LINE_EDITOR_TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
-        "type": "function",
-        "function": {
-            "name": "create_suggestion",
-            "description": (
-                "Propose a suggested edit (Google Docs Suggest Changes mode) "
-                "that replaces an exact substring of the document with new "
-                "text. Use for rewrites: tone drift, readability."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "matched_text": {
-                        "type": "string",
-                        "description": (
-                            "The EXACT, verbatim substring of the document body "
-                            "to replace, character-for-character. Must be unique "
-                            "in the document -- pick enough surrounding context "
-                            "to disambiguate if the phrase repeats."
-                        ),
-                    },
-                    "replacement_text": {
-                        "type": "string",
-                        "description": ("The full replacement text for matched_text."),
-                    },
-                    "rationale": {
-                        "type": "string",
-                        "description": (
-                            "One sentence: which category this fixes (tone_drift "
-                            "or readability) and why. Shown to the copywriter "
-                            "alongside the suggested edit."
-                        ),
-                    },
-                    "category": {
-                        "type": "string",
-                        "enum": LINE_EDITOR_CATEGORIES,
-                        "description": (
-                            "Which line-editing category this issue belongs to: "
-                            "tone_drift or readability."
-                        ),
-                    },
+        "name": "create_suggestion",
+        "description": (
+            "Propose a suggested edit (Google Docs Suggest Changes mode) "
+            "that replaces an exact substring of the document with new "
+            "text. Use for rewrites: tone drift, readability."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "matched_text": {
+                    "type": "string",
+                    "description": (
+                        "The EXACT, verbatim substring of the document body "
+                        "to replace, character-for-character. Must be unique "
+                        "in the document -- pick enough surrounding context "
+                        "to disambiguate if the phrase repeats."
+                    ),
                 },
-                "required": [
-                    "matched_text",
-                    "replacement_text",
-                    "rationale",
-                    "category",
-                ],
+                "replacement_text": {
+                    "type": "string",
+                    "description": ("The full replacement text for matched_text."),
+                },
+                "rationale": {
+                    "type": "string",
+                    "description": (
+                        "One sentence: which category this fixes (tone_drift "
+                        "or readability) and why. Shown to the copywriter "
+                        "alongside the suggested edit."
+                    ),
+                },
+                "category": {
+                    "type": "string",
+                    "enum": LINE_EDITOR_CATEGORIES,
+                    "description": (
+                        "Which line-editing category this issue belongs to: "
+                        "tone_drift or readability."
+                    ),
+                },
             },
+            "required": [
+                "matched_text",
+                "replacement_text",
+                "rationale",
+                "category",
+            ],
         },
     },
 ]

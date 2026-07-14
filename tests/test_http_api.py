@@ -60,8 +60,8 @@ class TestAuditEndpoint:
 
     @pytest.fixture
     def mock_llm_client(self, mocker: MockerFixture) -> MagicMock:
-        """Mock the OpenRouterClient class and its from_env method."""
-        mock_cls = mocker.patch("verbatim.http_api.OpenRouterClient")
+        """Mock the AnthropicClient class and its from_env method."""
+        mock_cls = mocker.patch("verbatim.http_api.AnthropicClient")
         return cast(MagicMock, mock_cls.from_env)
 
     @pytest.fixture
@@ -184,7 +184,7 @@ class TestAuditEndpoint:
         assert final["status"] == "done"
         assert final["result"]["category_counts"] == {}
         assert final["result"]["findings"] == []
-        mock_llm_client.assert_called_once_with(model="google/gemini-2.5-flash")
+        mock_llm_client.assert_called_once_with(model="claude-sonnet-5")
         mock_run_agent.assert_called_once_with(
             docs_client=mock_docs_client.return_value,
             llm_client=mock_llm_client.return_value,
