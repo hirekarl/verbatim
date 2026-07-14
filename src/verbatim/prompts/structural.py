@@ -57,16 +57,46 @@ in paragraphs 2, 3, and 4. The value is clear; CTAs are too frequent.
 "The CTA fires before the value" and "the value is buried after the CTA" are the \
 SAME structural imbalance. You MUST create exactly ONE comment — not zero, not two.
 
-TIEBREAKER — when both seem true, default to information_hierarchy:
-"Lead with value" is the more fundamental fix. If the value leads, CTA placement \
-follows naturally. So when a doc opens with a CTA and the value is buried later, \
-flag the BURIED VALUE (information_hierarchy), not the early CTA.
+TIEBREAKER — use STRUCTURAL DISTANCE to pick the category. Distance is measured \
+by CONTENT CONTINUITY, not raw sentence/paragraph count:
 
-Example — golden fixture pattern:
-"Log in and try our new feature today!" [para 2: context] [para 3: 9→3 steps, 2 min]
-→ The VALUE (9→3 steps) is buried in paragraph 3. Create ONE comment on the \
-opening, tagged information_hierarchy: "Lead with the benefit (three steps, \
-under two minutes) before asking the reader to log in."
+1. First identify "the justification": the campaign brief's Key message field \
+names the specific fact the reader needs before the ask lands. That fact is the \
+justification — not whatever "why" text happens to appear last in the document.
+
+2. Check: does the justification appear in the content IMMEDIATELY following the \
+CTA, with no unrelated paragraph in between — even if that's a separate sentence \
+or paragraph? Or does the reader have to pass through unrelated/setup content \
+first before reaching it?
+
+ADJACENT (justification is the very next content, nothing unrelated in between):
+→ Use cta_cadence. The CTA just needs to move slightly — right after the \
+justification that's already sitting next to it.
+→ Example: "Turn on 2FA today." [next sentence: the specific warning-banner \
+consequence that IS the brief's Key message] — even though this crosses a \
+paragraph break, nothing unrelated sits between the CTA and its justification. \
+Tag: cta_cadence.
+→ Counter-example: a document opens with the CTA, then paragraph 2 gives the \
+Key-message justification, and only paragraph 3 adds supporting/secondary \
+reasoning (e.g. broader risk context) — the SECONDARY reasoning being further \
+away does NOT make this "separated." The justification itself (paragraph 2) is \
+still adjacent. Judge distance by where the Key-message content lands, not by \
+where the document's last piece of supporting reasoning lands.
+
+SEPARATED (one or more unrelated paragraphs — history, setup, unrelated context \
+— sit between the CTA and the Key-message justification):
+→ Use information_hierarchy. The document structure needs reorganization.
+→ Example: "Log in and try our feature!" [para 2: unrelated company history] \
+[para 3: the benefit, which is the brief's Key message] — CTA and the Key \
+message are separated by unrelated content. Tag: information_hierarchy.
+
+CATEGORY SELECTION RULE — match your recommendation to the category:
+→ If your fix is "lead with the value/benefit" or "restructure so the key \
+message comes first" → you MUST use information_hierarchy (the VALUE is buried).
+→ If your fix is "move THIS CTA after the justification that's already nearby" \
+→ use cta_cadence (the CTA just needs to shift slightly).
+The test: does paragraph 2 contain the Key message, or unrelated setup? If \
+unrelated setup sits between the CTA and the Key message, use information_hierarchy.
 
 Do NOT create zero comments. Do NOT create two comments. Create exactly one.
 
