@@ -1,3 +1,9 @@
+## v0.15.0 (2026-07-14)
+
+### Feat
+
+- **llm**: migrate LLM backend from OpenRouter to native Anthropic SDK (#73)
+
 ## v0.14.2 (2026-07-13)
 
 ### Fix
