@@ -1,3 +1,9 @@
+## v0.15.3 (2026-07-15)
+
+### Fix
+
+- **shared**: make validate_category case-insensitive (#80)
+
 ## v0.15.2 (2026-07-15)
 
 ### Fix
