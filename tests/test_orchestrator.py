@@ -365,3 +365,27 @@ class TestDispatchToolCall:
         assert comments == 0
         assert finding is None
         docs_client.create_inline_comment.assert_not_called()
+
+    def test_returns_error_message_when_comment_missing_from_comment(self) -> None:
+        """Malformed create_inline_comment missing comment returns an error."""
+        docs_client = MagicMock()
+        tool_call = ToolCall(
+            id="call_1",
+            name="create_inline_comment",
+            arguments={"matched_text": "old text"},  # no comment
+        )
+
+        result, suggestions, comments, finding = _dispatch_tool_call(
+            docs_client=docs_client,
+            document_id="doc-id",
+            tool_call=tool_call,
+            seen_spans=set(),
+            allowed_categories=["information_hierarchy", "cta_cadence"],
+        )
+
+        assert "Missing required field" in result
+        assert "'comment'" in result
+        assert suggestions == 0
+        assert comments == 0
+        assert finding is None
+        docs_client.create_inline_comment.assert_not_called()

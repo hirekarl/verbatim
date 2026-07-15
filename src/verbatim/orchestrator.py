@@ -40,71 +40,89 @@ def _dispatch_tool_call(
         ``allowed_categories`` -- missing or not one of the caller's allowed
         categories both fall back to ``"uncategorized"`` -- and a call
         missing ``rationale`` falls back to an empty detail, rather than
-        raising. DocsClientError failures are caught and surfaced as result
-        text rather than raised, giving the model a chance to retry in the
-        same run.
+        raising. ``matched_text``, ``replacement_text``, and ``comment`` have
+        no such fallback: a call missing one of these raises ``KeyError`` on
+        the argument lookup, which is caught right there (before any
+        ``docs_client`` write is attempted) and surfaced as result text, so
+        the model can retry with a complete call. DocsClientError failures
+        from the write itself are caught separately and likewise surfaced as
+        result text rather than raised, giving the model a chance to retry
+        in the same run.
     """
-    try:
-        if tool_call.name == "create_suggestion":
+    if tool_call.name == "create_suggestion":
+        try:
             matched = tool_call.arguments["matched_text"]
             replacement = tool_call.arguments["replacement_text"]
-            if matched == replacement:
-                return (
-                    "Suggestion matches existing text; no change needed.",
-                    0,
-                    0,
-                    None,
-                )
-            span_key = (tool_call.name, matched)
-            if span_key in seen_spans:
-                return "Already flagged this text; skipping duplicate.", 0, 0, None
+        except KeyError as err:
+            return (
+                f"Error: Missing required field {err}. "
+                "Please retry with all required fields.",
+                0,
+                0,
+                None,
+            )
+        if matched == replacement:
+            return (
+                "Suggestion matches existing text; no change needed.",
+                0,
+                0,
+                None,
+            )
+        span_key = (tool_call.name, matched)
+        if span_key in seen_spans:
+            return "Already flagged this text; skipping duplicate.", 0, 0, None
+        try:
             docs_client.create_suggestion(
                 document_id=document_id,
                 matched_text=matched,
                 replacement_text=replacement,
             )
-            seen_spans.add(span_key)
-            finding = Finding(
-                category=validate_category(
-                    tool_call.arguments.get("category"), allowed_categories
-                ),
-                kind="suggestion",
-                matched_text=matched,
-                detail=tool_call.arguments.get("rationale", ""),
-            )
-            return "Suggestion created.", 1, 0, finding
-        if tool_call.name == "create_inline_comment":
+        except DocsClientError as err:
+            return f"Error: {err}", 0, 0, None
+        seen_spans.add(span_key)
+        finding = Finding(
+            category=validate_category(
+                tool_call.arguments.get("category"), allowed_categories
+            ),
+            kind="suggestion",
+            matched_text=matched,
+            detail=tool_call.arguments.get("rationale", ""),
+        )
+        return "Suggestion created.", 1, 0, finding
+    if tool_call.name == "create_inline_comment":
+        try:
             matched = tool_call.arguments["matched_text"]
-            span_key = (tool_call.name, matched)
-            if span_key in seen_spans:
-                return "Already flagged this text; skipping duplicate.", 0, 0, None
             comment = tool_call.arguments["comment"]
+        except KeyError as err:
+            return (
+                f"Error: Missing required field {err}. "
+                "Please retry with all required fields.",
+                0,
+                0,
+                None,
+            )
+        span_key = (tool_call.name, matched)
+        if span_key in seen_spans:
+            return "Already flagged this text; skipping duplicate.", 0, 0, None
+        try:
             docs_client.create_inline_comment(
                 document_id=document_id,
                 matched_text=matched,
                 comment=comment,
             )
-            seen_spans.add(span_key)
-            finding = Finding(
-                category=validate_category(
-                    tool_call.arguments.get("category"), allowed_categories
-                ),
-                kind="comment",
-                matched_text=matched,
-                detail=comment,
-            )
-            return "Comment created.", 0, 1, finding
-        return f"Unknown tool: {tool_call.name}", 0, 0, None
-    except KeyError as err:
-        return (
-            f"Error: Missing required field {err}. "
-            "Please retry with all required fields.",
-            0,
-            0,
-            None,
+        except DocsClientError as err:
+            return f"Error: {err}", 0, 0, None
+        seen_spans.add(span_key)
+        finding = Finding(
+            category=validate_category(
+                tool_call.arguments.get("category"), allowed_categories
+            ),
+            kind="comment",
+            matched_text=matched,
+            detail=comment,
         )
-    except DocsClientError as err:
-        return f"Error: {err}", 0, 0, None
+        return "Comment created.", 0, 1, finding
+    return f"Unknown tool: {tool_call.name}", 0, 0, None
 
 
 def _run_single_agent_loop(
