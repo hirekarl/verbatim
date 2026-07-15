@@ -60,5 +60,13 @@ class TestValidateCategory:
             == UNCATEGORIZED_CATEGORY
         )
 
-    def test_is_case_sensitive(self) -> None:
-        assert validate_category("Tone_Drift", CATEGORIES) == UNCATEGORIZED_CATEGORY
+    def test_is_case_insensitive(self) -> None:
+        """'Readability' matches 'readability' in allowed list."""
+        assert validate_category("Readability", CATEGORIES) == "readability"
+        assert validate_category("TONE_DRIFT", CATEGORIES) == "tone_drift"
+        assert validate_category("CTA_Cadence", CATEGORIES) == "cta_cadence"
+
+    def test_returns_normalized_lowercase_category(self) -> None:
+        """Even when input is valid but mixed-case, output is lowercase."""
+        result = validate_category("Information_Hierarchy", CATEGORIES)
+        assert result == "information_hierarchy"
