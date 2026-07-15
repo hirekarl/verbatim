@@ -1,3 +1,9 @@
+## v0.15.2 (2026-07-15)
+
+### Fix
+
+- **orchestrator**: handle malformed tool calls gracefully (#79)
+
 ## v0.15.1 (2026-07-14)
 
 ### Fix
