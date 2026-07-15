@@ -36,10 +36,11 @@ def validate_category(category: str | None, allowed: list[str]) -> str:
 
     Handles both failure modes a tool call's arguments can arrive in: the
     ``category`` key missing entirely (``category`` is ``None``) and the key
-    present but holding a value outside ``allowed`` -- misspelled, wrong
-    casing, or borrowed from a different specialist agent's category set.
-    Neither failure mode is enforced server-side by the model's tool-calling
-    JSON-schema ``enum``, so this is the actual enforcement point.
+    present but holding a value outside ``allowed`` -- misspelled or borrowed
+    from a different specialist agent's category set. Matching is
+    case-insensitive: ``"Readability"`` matches ``"readability"`` in
+    ``allowed``. Neither failure mode is enforced server-side by the model's
+    tool-calling JSON-schema ``enum``, so this is the actual enforcement point.
 
     Args:
         category: The raw ``category`` argument from the tool call, or
@@ -50,9 +51,12 @@ def validate_category(category: str | None, allowed: list[str]) -> str:
             ``LINE_EDITOR_CATEGORIES``) for the split agents.
 
     Returns:
-        ``category`` unchanged if it's a member of ``allowed``, otherwise
-        ``UNCATEGORIZED_CATEGORY``.
+        The normalized (lowercase) category if it matches an entry in
+        ``allowed`` (case-insensitive), otherwise ``UNCATEGORIZED_CATEGORY``.
     """
-    if category is None or category not in allowed:
+    if category is None:
         return UNCATEGORIZED_CATEGORY
-    return category
+    normalized = category.lower()
+    if normalized not in allowed:
+        return UNCATEGORIZED_CATEGORY
+    return normalized
