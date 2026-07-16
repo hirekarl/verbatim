@@ -18,19 +18,25 @@ from verbatim.prompts.line_editor import (
 class TestLineEditorCategories:
     """Tests for the Line-Editor agent's restricted category list."""
 
-    def test_covers_only_tone_drift_and_readability(self) -> None:
-        """The Line-Editor agent judges exactly these 2 of the 7 categories."""
-        assert LINE_EDITOR_CATEGORIES == ["tone_drift", "readability"]
+    def test_covers_subjective_and_deterministic_categories(self) -> None:
+        """The Line-Editor handles 2 subjective + 3 deterministic categories."""
+        assert LINE_EDITOR_CATEGORIES == [
+            "tone_drift",
+            "readability",
+            "formatting_and_style",
+            "banned_words_and_competitors",
+            "channel_constraints",
+        ]
 
 
 class TestLineEditorToolSchemas:
-    """Tests for LINE_EDITOR_TOOL_SCHEMAS -- suggestion-only, no comment tool."""
+    """Tests for LINE_EDITOR_TOOL_SCHEMAS -- suggestion and comment tools."""
 
-    def test_defines_exactly_the_one_suggestion_tool(self) -> None:
-        """create_suggestion only -- create_inline_comment is never available."""
+    def test_defines_suggestion_and_comment_tools(self) -> None:
+        """Both tools available: suggestions for rewrites, comments for flags."""
         names = {schema["name"] for schema in LINE_EDITOR_TOOL_SCHEMAS}
 
-        assert names == {"create_suggestion"}
+        assert names == {"create_suggestion", "create_inline_comment"}
 
     def test_all_schemas_use_the_flat_claude_tool_shape(self) -> None:
         """Every schema is flat -- no OpenAI-style type/function wrapper."""
@@ -52,14 +58,27 @@ class TestLineEditorToolSchemas:
     def test_create_suggestion_requires_category_from_line_editor_categories_only(
         self,
     ) -> None:
-        """category's enum is restricted to the 2 Line-Editor categories.
+        """category's enum is restricted to Line-Editor categories.
 
         This is the enforced scope-narrowing: the model cannot tag a
-        Line-Editor finding as information_hierarchy, cta_cadence, or any of
-        the other 5 categories that belong to a different agent.
+        Line-Editor finding as information_hierarchy or cta_cadence, which
+        belong to the Structural agent.
         """
         schema = next(
             s for s in LINE_EDITOR_TOOL_SCHEMAS if s["name"] == "create_suggestion"
+        )
+        properties = schema["input_schema"]["properties"]
+        required = schema["input_schema"]["required"]
+
+        assert "category" in required
+        assert properties["category"]["enum"] == LINE_EDITOR_CATEGORIES
+
+    def test_create_inline_comment_requires_category_from_line_editor_categories(
+        self,
+    ) -> None:
+        """create_inline_comment also restricts to Line-Editor categories."""
+        schema = next(
+            s for s in LINE_EDITOR_TOOL_SCHEMAS if s["name"] == "create_inline_comment"
         )
         properties = schema["input_schema"]["properties"]
         required = schema["input_schema"]["required"]
