@@ -1,3 +1,9 @@
+## v0.16.1 (2026-07-16)
+
+### Fix
+
+- **llm-client**: disable extended thinking for reliable tool use (#85)
+
 ## v0.16.0 (2026-07-16)
 
 ### Feat
