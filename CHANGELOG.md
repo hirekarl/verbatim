@@ -1,3 +1,9 @@
+## v0.16.0 (2026-07-16)
+
+### Feat
+
+- **line-editor**: expand agent to handle deterministic findings (#83)
+
 ## v0.15.3 (2026-07-15)
 
 ### Fix

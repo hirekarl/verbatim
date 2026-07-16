@@ -137,6 +137,8 @@ class AnthropicClient:
                 system=system,
                 messages=cast(Any, messages),
                 tools=cast(Any, tools),
+                # Disable extended thinking for reliable tool use
+                thinking={"type": "disabled"},
             )
         except anthropic.APIConnectionError as err:
             logger.exception("Anthropic chat completion request failed: network error")
