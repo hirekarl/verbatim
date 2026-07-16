@@ -155,6 +155,7 @@ class TestCompleteChat:
             system="You are Verbatim.",
             messages=messages,
             tools=tools,
+            thinking={"type": "disabled"},
         )
 
     def test_forwards_custom_max_tokens_to_the_sdk_call(
@@ -169,6 +170,7 @@ class TestCompleteChat:
             system="",
             messages=[],
             tools=[],
+            thinking={"type": "disabled"},
         )
 
     def test_returns_content_only_result_when_the_model_makes_no_tool_calls(
