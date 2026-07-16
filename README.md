@@ -34,7 +34,7 @@ Verbatim is an AI agent that reviews draft marketing copy inside Google Docs aga
 
 ### How it works
 
-A copywriter kicks off a check from the command line against a draft document and its campaign brief. From there the run is fully automated: Verbatim reads both documents once, runs its deterministic rule checks, then dispatches two specialist LLM agents concurrently on separate threads — each restricted to its own narrow slice of categories and its own single tool, writing to the same document under a per-document write lock — before a plain-Python orchestrator reconciles their output into one result. Nothing is written until the copywriter reviews it.
+A copywriter kicks off a check from the command line (or, via the hosted backend, from the Google Docs sidebar Add-on) against a draft document and its campaign brief. From there the run is fully automated: Verbatim reads both documents once, runs its deterministic rule checks, then dispatches two specialist LLM agents concurrently on separate threads — each restricted to its own narrow slice of categories, writing to the same document under a per-document write lock — before a plain-Python orchestrator reconciles their output into one result and flags (without resolving) any spans where both agents independently raised an issue. If one specialist's thread fails, the other's already-live writes are still returned rather than discarded; only a failure of *both* aborts the run. Nothing is written until the copywriter reviews it.
 
 ```mermaid
 flowchart TD
@@ -43,13 +43,13 @@ flowchart TD
     C --> D[Fetch draft document content]
     C --> E[Fetch campaign brief]
     D --> F["Deterministic evaluator:<br/>banned words, formatting/style, channel limits"]
-    E --> G["Orchestrator assembles both<br/>specialist system prompts"]
+    E --> G["Orchestrator assembles both specialist<br/>system prompts (evaluator findings<br/>injected into both, as context)"]
     F --> G
-    G --> H{"Structural agent (thread 1)<br/>(information hierarchy, CTA cadence)"}
-    G --> I{"Line-Editor agent (thread 2)<br/>(tone drift, readability)"}
+    G --> H{"Structural agent (thread 1)<br/>information_hierarchy, cta_cadence"}
+    G --> I{"Line-Editor agent (thread 2)<br/>tone_drift, readability +<br/>the 3 deterministic categories"}
     H -- "create_inline_comment" --> H
-    I -- "create_suggestion" --> I
-    H -- "no more tool calls,<br/>or max rounds hit" --> J[Orchestrator: reconcile_findings]
+    I -- "create_suggestion or<br/>create_inline_comment" --> I
+    H -- "no more tool calls,<br/>or max rounds hit" --> J["Orchestrator: reconcile_findings<br/>(merge + flag cross-agent span overlaps)"]
     I -- "no more tool calls,<br/>or max rounds hit" --> J
     J --> K["Print run summary<br/>(suggestions/comments made)"]
     K --> L[Copywriter reviews suggestions & comments in Google Docs]
@@ -57,15 +57,15 @@ flowchart TD
     M --> N[Draft goes on for strategic sign-off]
 ```
 
-The evaluator and the two specialist agents cover different slices of the 7 audit categories. `BrandGuidelinesEvaluator` handles the mechanically-checkable ones (banned words, formatting/style mechanics, channel constraints) with plain regex — its findings aren't discarded, they're injected into both agents' system prompts as pre-verified, citable evidence. Of the four subjective categories left, the **Structural agent** judges information hierarchy and CTA cadence (whole-document, paragraph-ordering reasoning) and can only call `create_inline_comment` — no rewrite tool — since those issues call for reorganizing, not replacing, text. The **Line-Editor agent** judges tone drift and readability (local, sentence-level rewrites) and can only call `create_suggestion` — no comment tool. Restricting each agent to one tool turns what used to be a soft per-category tool *preference* into a hard constraint neither agent can violate. `agent.py`'s `run_agent()` dispatches the two on a `ThreadPoolExecutor` (each with its own `AnthropicClient` instance) and merges their results with `orchestrator.reconcile_findings`; `docs_client.py`'s write methods hold their own lock, since both specialists can end up writing to the same document from separate threads at once. Exception handling is fail-fast — if either specialist's thread raises, that exception propagates immediately and the other's result is discarded rather than partially reconciled. The original single-prompt, single-loop implementation is kept as `run_agent_legacy` for comparison. Full rationale: [`MULTI_AGENT_PLAN.md`](MULTI_AGENT_PLAN.md).
+The evaluator and the two specialist agents cover different slices of the 7 audit categories. `BrandGuidelinesEvaluator` handles the mechanically-checkable ones (banned words, formatting/style mechanics, channel constraints) with plain regex — its findings aren't discarded, they're injected into both agents' system prompts as a pre-verified `DETERMINISTIC FINDINGS` block. Only the **Line-Editor agent** acts on that block, though: it owns 5 of the 7 categories — tone drift and readability by its own subjective judgment (local, sentence-level rewrites), plus formatting/style, banned words/competitors, and channel constraints by transcribing the evaluator's pre-verified findings into a `create_suggestion` call (if the finding carries a fix) or a `create_inline_comment` call (if it doesn't). The **Structural agent** judges the remaining two categories — information hierarchy and CTA cadence (whole-document, paragraph-ordering reasoning) — and can only call `create_inline_comment`, since those issues call for reorganizing, not replacing, text; it never acts on the deterministic block, even though it's present in its context too. Each agent's `category` argument is validated server-side against its own allowed list (`validate_category`), so a category that belongs to the other specialist — or isn't real — falls back to `"uncategorized"` rather than corrupting the split. `agent.py`'s `run_agent()` dispatches the two on a `ThreadPoolExecutor` (each with its own `AnthropicClient` instance) and merges their results with `orchestrator.reconcile_findings`, which also flags (without resolving) any spans where both agents independently raised an issue — see `_find_cross_agent_overlaps`. `docs_client.py`'s write methods hold their own lock, since both specialists can end up writing to the same document from separate threads at once. Both specialist futures are always awaited: if exactly one thread raises, the survivor's real, already-posted output is still returned (with the failure recorded in `specialist_errors`) rather than discarded; only if *both* raise does the run fail outright. The original single-prompt, single-loop implementation is kept as `run_agent_legacy` for comparison. Full rationale: [`MULTI_AGENT_PLAN.md`](MULTI_AGENT_PLAN.md).
 
 ### Design notes
 
 A few things about how this was built that might be worth stealing if you're building something similar:
 
-- **Deterministic + LLM hybrid, not LLM-only.** Regex doesn't hallucinate a banned-word match, so `BrandGuidelinesEvaluator` handles every category that's pure pattern-matching without a model call at all. Its findings aren't discarded once computed — they're injected into the LLM's system prompt as pre-verified, citable evidence, so the model spends its judgment budget only on the four genuinely subjective categories instead of re-deriving mechanical checks a regex already nailed. Cheaper, faster, and more reliable than routing everything through the model.
+- **Deterministic + LLM hybrid, not LLM-only.** Regex doesn't hallucinate a banned-word match, so `BrandGuidelinesEvaluator` handles every category that's pure pattern-matching without a model call at all. Its findings aren't discarded once computed — they're injected into the LLM's system prompt as pre-verified, citable evidence, so the model never has to *re-derive* a mechanical check a regex already nailed. For the 3 deterministic categories, the Line-Editor agent only has to transcribe each finding into a tool call; its actual judgment budget goes toward the 4 categories (tone drift, readability, information hierarchy, CTA cadence) that are genuinely subjective. Cheaper, faster, and more reliable than routing everything through the model.
 - **The default guidelines are a real style guide, not a toy fixture.** `src/verbatim/data/brand_guidelines.json` is a synthesis of [Mailchimp's public Content Style Guide](https://styleguide.mailchimp.com/) — not a claim about Mailchimp's actual internal rules, just realistic, non-synthetic brand voice/style data to build and demo against. Point `-g/--guidelines` at a different file to audit against a different brand.
-- **A knowledge base written for the coding agent, not just the team.** `.knowledge-base/` decomposes the Google Docs/Drive/Anthropic REST references into map-and-leaf files (one `MAP.md` index plus a focused leaf per resource, each with a real request/response example and a "Gotchas" section). It exists so an AI coding agent implementing `docs_client.py` doesn't have to re-fetch Google's live docs — or worse, hallucinate a plausible-looking field name — every session. Scoped strictly to endpoints actually called; a new endpoint gets a new leaf rather than a cold read of the live reference.
+- **A knowledge base written for the coding agent, not just the team.** `.knowledge-base/` decomposes the Google Docs, Drive, OAuth2, Workspace Add-ons, and Anthropic REST references into map-and-leaf files (one `MAP.md` index plus a focused leaf per resource, each with a real request/response example and a "Gotchas" section). It exists so an AI coding agent implementing `docs_client.py` doesn't have to re-fetch Google's live docs — or worse, hallucinate a plausible-looking field name — every session. Scoped strictly to endpoints actually called; a new endpoint gets a new leaf rather than a cold read of the live reference.
 - **"Suggested edit" requires Suggester access, not Editor.** `create_suggestion` only lands as a reviewable suggestion — the entire point, since nothing should reach the document unreviewed — if the authenticated account has Commenter/Suggester (not Editor) permission on the target doc. Editor access makes the identical API call apply the edit directly and silently instead. Found by testing against a live doc; it isn't called out anywhere obvious in Google's docs.
 - **The narrower Drive scope 404s on this project's exact use case.** `drive.file` only covers files the app itself created or the user picked via a file picker — it 404s on `comments.create` for a doc a copywriter just opens by link, which is Verbatim's whole workflow. `WRITE_SCOPES` requests the broader `drive` scope instead, confirmed live rather than assumed from the scope reference.
 
@@ -221,24 +221,32 @@ uv run verbatim 1_abc123xyz 1_brief456abc --channel email
 
 ### HTTP usage
 
-The same audit logic is also exposed over HTTP, as the backend for the Workspace Add-on (see `docs/workspace-addon-migration.md`) — deployed and functionally complete as a Cloud Run service (`verbatim-backend`), with the Add-on itself pushed to a real Apps Script project; only a final manual browser end-to-end test is still outstanding. This is additive, not a replacement: `cli.py`/`uv run verbatim` above remains the local-dev/direct-run entrypoint.
+The same audit logic is also exposed over HTTP, as the backend for the Workspace Add-on (see `docs/workspace-addon-migration.md`) — deployed as a Cloud Run service (`verbatim-backend`), with the Add-on itself pushed to a real Apps Script project; only a final manual browser end-to-end test is still outstanding. This is additive, not a replacement: `cli.py`/`uv run verbatim` above remains the local-dev/direct-run entrypoint.
 
 ```sh
 uv run verbatim-server
 ```
 
-This requires `GOOGLE_OAUTH_CLIENT_ID` to be set (alongside `ANTHROPIC_API_KEY`, in the same `.env`) — the OAuth client ID inbound bearer tokens are expected to carry as their audience, checked against Google's tokeninfo endpoint before any request is trusted. See `src/verbatim/token_validator.py`.
+This requires `GOOGLE_OAUTH_CLIENT_ID` and `BACKEND_SHARED_SECRET` to be set (alongside `ANTHROPIC_API_KEY`, in the same `.env`). `GOOGLE_OAUTH_CLIENT_ID` is the audience inbound bearer tokens are expected to carry, checked against Google's tokeninfo endpoint before any request is trusted — see `src/verbatim/token_validator.py`. `BACKEND_SHARED_SECRET` is a static secret the caller must also present on every request, checked first as a cheap filter against internet scanning/probing, before that (more expensive) tokeninfo call ever happens.
 
-This starts a FastAPI app (via uvicorn) on `PORT` (default `8080`) with a single route:
+This starts a FastAPI app (via uvicorn) on `PORT` (default `8080`). An audit is a submit-then-poll pair, not one blocking call: `UrlFetchApp.fetch()` on the Apps Script side has a hard, non-configurable 60-second timeout that a real audit (an LLM tool-calling loop of up to 20 round trips) routinely exceeds, so `POST /audit` returns a job id immediately and the caller polls `GET /audit/{job_id}` for the outcome.
 
 ```sh
+# 1. Submit the job -- returns 202 Accepted with a job id right away
 curl -X POST http://localhost:8080/audit \
   -H "Authorization: Bearer <google-oauth-access-token>" \
+  -H "X-Backend-Shared-Secret: <shared-secret>" \
   -H "Content-Type: application/json" \
   -d '{"document_id": "1_abc123xyz", "brief_id": "1_brief456abc", "channel": "email"}'
+# => {"job_id": "..."}
+
+# 2. Poll until status is "done" or "error"
+curl http://localhost:8080/audit/<job_id> \
+  -H "X-Backend-Shared-Secret: <shared-secret>"
+# => {"job_id": "...", "status": "done", "result": {...}, "error": null}
 ```
 
-Unlike the CLI (which authenticates via a local OAuth consent flow, caching a token to `token.json`), the HTTP entrypoint expects the caller to already hold a valid Google OAuth access token and forward it in the `Authorization` header — see `GoogleDocsClient.from_access_token()`. The token is validated against Google's tokeninfo endpoint (audience and required scope) before it's trusted.
+Unlike the CLI (which authenticates via a local OAuth consent flow, caching a token to `token.json`), `POST /audit` expects the caller to already hold a valid Google OAuth access token and forward it in the `Authorization` header — see `GoogleDocsClient.from_access_token()`. That token is validated against Google's tokeninfo endpoint (audience and required scope) before it's trusted. `GET /audit/{job_id}` only re-checks the shared secret — no fresh Docs/Drive write happens there, since those already happened (or didn't) during the background job. The job store is a plain in-process dict, which only works because the deployed service is pinned to a single instance (`--min-instances=1 --max-instances=1`, no extra uvicorn/gunicorn workers) — see `docs/workspace-addon-migration.md` for the full deployment rationale, including why `--no-cpu-throttling` is also required for the background job to actually make progress between polls.
 
 ## Reference
 
@@ -269,7 +277,7 @@ verbatim/
 │   ├── prompts/            # per-specialist-agent prompt assembly + tool schemas
 │   │   ├── shared.py       # CATEGORIES, validate_category() -- shared by every agent
 │   │   ├── structural.py   # Structural agent: information hierarchy, CTA cadence
-│   │   └── line_editor.py  # Line-Editor agent: tone drift, readability
+│   │   └── line_editor.py  # Line-Editor agent: tone drift, readability + 3 deterministic categories
 │   ├── py.typed
 │   ├── token_validator.py  # validates inbound Add-on bearer tokens (tokeninfo)
 │   └── data/
@@ -279,27 +287,44 @@ verbatim/
 │   ├── test_orchestrator.py
 │   ├── test_cli.py
 │   ├── test_docs_client.py
+│   ├── test_evaluator.py
+│   ├── test_brand_guidelines.py
 │   ├── test_http_api.py
 │   ├── test_llm_client.py
 │   ├── test_prompt.py
 │   ├── test_prompts_shared.py
 │   ├── test_prompts_structural.py
 │   ├── test_prompts_line_editor.py
-│   └── test_token_validator.py
+│   ├── test_token_validator.py
+│   └── test_version.py
 ├── addon/                  # Editor Add-on source (Apps Script) -- see addon/README.md
 │   ├── appsscript.json     # manifest: runtime, oauthScopes, Docs Editor Add-on config
 │   ├── Code.gs             # homepage trigger + CardService sidebar UI
-│   ├── Backend.gs          # UrlFetchApp call to the Python backend
-│   └── icon.png            # sidebar icon
+│   ├── Backend.gs          # UrlFetchApp submit/poll calls to the Python backend
+│   ├── icon.png            # sidebar icon
+│   ├── .clasp.json         # clasp deploy target (the standalone Apps Script project)
+│   └── README.md           # Add-on setup: Script Properties, clasp push/deploy
+├── presentation/           # demo-day deck + fixtures (not part of the installable package)
+│   ├── PRESENTATION_PLAN.md
+│   ├── build_deck.py       # generates the demo deck from PRESENTATION_PLAN.md
+│   ├── verify_deck.py      # structural sanity check on the generated deck
+│   └── demo/               # sample briefs/drafts + their expected findings, per scenario
 ├── .knowledge-base/        # decomposed reference docs for external APIs (map-and-leaf)
-
-├── docs/                   # PRD and research reference docs (.docx + Markdown snapshots)
-├── .env.example            # ANTHROPIC_API_KEY/GOOGLE_OAUTH_CLIENT_ID template; copy to .env (git-ignored)
+├── docs/                   # PRD/research docs (.docx + Markdown snapshots) + workspace-addon-migration.md
+├── .env.example            # ANTHROPIC_API_KEY/GOOGLE_OAUTH_CLIENT_ID/BACKEND_SHARED_SECRET template; copy to .env (git-ignored)
 ├── .dockerignore
 ├── BOOTSTRAPPING.md        # scaffolding rationale and remaining setup work
+├── CHANGELOG.md            # auto-generated by `cz bump` on every merge to main
 ├── CLAUDE.md               # project context for AI coding agents
+├── CODE_OF_CONDUCT.md
+├── CONTRIBUTING.md
 ├── Dockerfile              # builds verbatim-server for Cloud Run (not the CLI)
+├── ENHANCEMENT_IDEAS.md    # optional post-demo backlog
 ├── LICENSE                 # MIT
+├── MULTI_AGENT_PLAN.md     # full rationale for the Structural/Line-Editor split
+├── SECURITY.md
+├── TEST_PLAN.md
+├── TODO.md                 # live sprint plan + Karl/Christina file ownership map
 ├── pyproject.toml          # project metadata + all tool configuration
 └── uv.lock                 # pinned dependency versions
 ```
