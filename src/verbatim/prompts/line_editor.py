@@ -122,9 +122,7 @@ LINE_EDITOR_TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "category": {
                     "type": "string",
                     "enum": LINE_EDITOR_CATEGORIES,
-                    "description": (
-                        "Which category this issue belongs to."
-                    ),
+                    "description": ("Which category this issue belongs to."),
                 },
             },
             "required": [
