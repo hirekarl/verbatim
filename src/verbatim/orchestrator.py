@@ -267,15 +267,17 @@ def reconcile_findings(
 ) -> AgentRunResult:
     """Merge the Structural and Line-Editor agents' results into one.
 
-    Cross-agent span dedup is a non-issue by construction (the two agents
-    never share a tool name), so this is a straight merge, not a dedup pass.
-    Deliberately does not re-validate either input's categories: every
-    ``Finding`` in ``structural``/``line_editor`` already passed through
-    ``_run_single_agent_loop``'s ``validate_category`` call at dispatch
-    time, so a category outside either agent's allowed set can't reach this
-    function -- re-checking here would be validating data that can't be
-    invalid by construction. See `MULTI_AGENT_PLAN.md`'s "Category
-    validation" section.
+    This is a straight merge, not a dedup pass: each agent's findings come
+    from its own isolated ``_run_single_agent_loop`` run, so there's no
+    identity collision to resolve here even though both agents can now call
+    ``create_inline_comment`` -- name-based dedup was never the mechanism
+    that mattered. Deliberately does not re-validate either input's
+    categories: every ``Finding`` in ``structural``/``line_editor`` already
+    passed through ``_run_single_agent_loop``'s ``validate_category`` call
+    at dispatch time, so a category outside either agent's allowed set
+    can't reach this function -- re-checking here would be validating data
+    that can't be invalid by construction. See `MULTI_AGENT_PLAN.md`'s
+    "Category validation" section.
 
     Cross-agent *content* overlap (both agents flagging the same or
     overlapping text) is a separate, real possibility this function does
@@ -284,8 +286,9 @@ def reconcile_findings(
     Args:
         structural: The Structural agent's (Info Hierarchy + CTA Cadence) run
             result.
-        line_editor: The Line-Editor agent's (Tone Drift + Readability) run
-            result.
+        line_editor: The Line-Editor agent's (Tone Drift + Readability +
+            the deterministic Formatting/Style, Banned Words/Competitors,
+            and Channel Constraints findings) run result.
 
     Returns:
         One combined ``AgentRunResult`` representing both agents' output.
