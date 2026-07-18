@@ -19,6 +19,7 @@ from verbatim.docs_client import (
     DocumentNotFoundError,
     GoogleDocsClient,
     Heading,
+    SpanAlreadyEditedError,
     TextNotFoundError,
     _extract_text_chunks,
     _extract_title_body_and_headings,
@@ -1008,6 +1009,76 @@ class TestGoogleDocsClientCreateInlineComment:
 
         with pytest.raises(DocsClientError):
             client.create_inline_comment("doc-id", "feature", "Consider rephrasing.")
+
+
+class TestGoogleDocsClientStaleSpanAfterEdit:
+    """Tests that a comment can't land on text another call already rewrote.
+
+    Guards against the Phase 2 concurrency failure mode where the
+    Line-Editor specialist rewrites a span while the Structural specialist
+    -- reasoning from its own frozen, pre-edit view of the document -- is
+    still mid-run and later tries to comment on that same span.
+    """
+
+    @pytest.fixture
+    def fake_service(self) -> MagicMock:
+        """A fake Docs API discovery service returning a fixed document."""
+        service = MagicMock()
+        service.documents.return_value.get.return_value.execute.return_value = (
+            _FAKE_DOCUMENT_WITH_INDICES
+        )
+        return service
+
+    @pytest.fixture
+    def fake_drive_service(self) -> MagicMock:
+        """A fake Drive API discovery service, defaulting to non-Editor access."""
+        drive_service = MagicMock()
+        drive_service.files.return_value.get.return_value.execute.return_value = {
+            "capabilities": {"canEdit": False}
+        }
+        return drive_service
+
+    @pytest.fixture
+    def client(
+        self, fake_service: MagicMock, fake_drive_service: MagicMock
+    ) -> GoogleDocsClient:
+        """A GoogleDocsClient wired to both fake services."""
+        return GoogleDocsClient(service=fake_service, drive_service=fake_drive_service)
+
+    def test_raises_when_commenting_on_text_another_call_already_replaced(
+        self, client: GoogleDocsClient, fake_drive_service: MagicMock
+    ) -> None:
+        """An overlapping create_inline_comment call is refused, not posted stale."""
+        client.create_suggestion("doc-id", "feature", "capability")
+
+        with pytest.raises(SpanAlreadyEditedError):
+            client.create_inline_comment("doc-id", "feature", "Consider rephrasing.")
+
+        fake_drive_service.comments.return_value.create.assert_not_called()
+
+    def test_raises_when_the_comment_span_contains_an_edited_span(
+        self, client: GoogleDocsClient, fake_drive_service: MagicMock
+    ) -> None:
+        """A comment spanning a superstring of an already-edited span is also
+        refused."""
+        client.create_suggestion("doc-id", "feature", "capability")
+
+        with pytest.raises(SpanAlreadyEditedError):
+            client.create_inline_comment(
+                "doc-id", "Our new feature helps", "Consider rephrasing."
+            )
+
+        fake_drive_service.comments.return_value.create.assert_not_called()
+
+    def test_does_not_raise_for_a_span_unrelated_to_any_edit(
+        self, client: GoogleDocsClient, fake_drive_service: MagicMock
+    ) -> None:
+        """An unrelated span is unaffected by another span's edit record."""
+        client.create_suggestion("doc-id", "feature", "capability")
+
+        client.create_inline_comment("doc-id", "helps you", "Consider rephrasing.")
+
+        fake_drive_service.comments.return_value.create.assert_called_once()
 
 
 class TestGoogleDocsClientConcurrentWrites:

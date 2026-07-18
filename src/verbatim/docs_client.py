@@ -49,6 +49,16 @@ class AmbiguousMatchError(DocsClientError):
     """Raised when a suggestion/comment target substring isn't unique in the doc."""
 
 
+class SpanAlreadyEditedError(DocsClientError):
+    """Raised when a comment target overlaps text a suggestion already rewrote.
+
+    Guards against the Phase 2 concurrency failure mode where the
+    Line-Editor specialist rewrites a span while the Structural specialist --
+    reasoning from its own frozen, pre-edit view of the document -- is still
+    mid-run and later tries to comment on that same span.
+    """
+
+
 @dataclass(frozen=True)
 class Heading:
     """A single heading extracted from a document's structural content."""
@@ -377,6 +387,11 @@ class GoogleDocsClient:
         self._drive_service = drive_service
         self._doc_cache: dict[str, dict[str, Any]] = {}
         self._write_lock = threading.Lock()
+        # matched_text values already rewritten via create_suggestion this
+        # session, so a concurrent create_inline_comment call reasoning from
+        # a stale pre-edit view of the document can be refused rather than
+        # anchored to text that's since changed.
+        self._edited_spans: set[str] = set()
 
     def _get_cached_document(self, document_id: str) -> dict[str, Any]:
         """Fetch a document, retrieving from cache if present.
@@ -619,6 +634,7 @@ class GoogleDocsClient:
                 f"Failed to create suggestion in document: {document_id}",
             )
             self.clear_cache(document_id)
+            self._edited_spans.add(matched_text)
 
     def create_inline_comment(
         self, document_id: str, matched_text: str, comment: str
@@ -645,6 +661,8 @@ class GoogleDocsClient:
                 fetch/comment creation failed.
             TextNotFoundError: ``matched_text`` doesn't appear in the document.
             AmbiguousMatchError: ``matched_text`` appears more than once.
+            SpanAlreadyEditedError: ``matched_text`` overlaps a span a
+                ``create_suggestion`` call already rewrote.
         """
         if self._drive_service is None:
             raise DocsClientError(
@@ -653,6 +671,14 @@ class GoogleDocsClient:
                 "from_local_credentials(include_drive=True)."
             )
         with self._write_lock:
+            if any(
+                matched_text in edited or edited in matched_text
+                for edited in self._edited_spans
+            ):
+                raise SpanAlreadyEditedError(
+                    f"Text already rewritten by a suggestion, refusing to "
+                    f"comment on stale span: {matched_text!r}"
+                )
             document = self._get_cached_document(document_id)
             start, end = _locate_document_range(document, matched_text)
             body = {"content": f'Re: "{matched_text}"\n\n{comment}'}
