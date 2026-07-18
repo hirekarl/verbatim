@@ -159,7 +159,18 @@ class TestCompleteChat:
                     "cache_control": {"type": "ephemeral"},
                 }
             ],
-            messages=messages,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Audit this.",
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ],
+                }
+            ],
             tools=tools,
             thinking={"type": "disabled"},
         )
@@ -186,6 +197,97 @@ class TestCompleteChat:
                 "cache_control": {"type": "ephemeral"},
             }
         ]
+
+    def test_marks_only_the_last_message_blocks_last_entry_as_the_breakpoint(
+        self, client: AnthropicClient, mock_create: Any
+    ) -> None:
+        """Only the newest message's last content block gets cache_control.
+
+        A tool-calling loop resends the whole conversation every round since
+        the Messages API is stateless. Moving the single breakpoint to the
+        tail each round -- rather than leaving it on the first message --
+        lets the read hit everything before it and extends the write to
+        cover the newest turn too (the "Multi-turn conversations" placement
+        pattern from shared/prompt-caching.md). Earlier messages are
+        rendered in the same block-list shape but without cache_control, so
+        their bytes stay identical round over round -- see the string vs.
+        block-list note in ``test_forwards_system_messages_and_tools_to_the_sdk_call``.
+        """
+        mock_create.return_value = _fake_response([_fake_text_block("ok")])
+        messages: list[dict[str, Any]] = [
+            {"role": "user", "content": "Begin your audit of the document."},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": "toolu_1", "name": "x", "input": {}}
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "toolu_1",
+                        "content": "Comment created.",
+                    }
+                ],
+            },
+        ]
+
+        client.complete_chat(system="sys", messages=messages, tools=[])
+
+        sent_messages = mock_create.call_args.kwargs["messages"]
+        assert sent_messages[0] == {
+            "role": "user",
+            "content": [{"type": "text", "text": "Begin your audit of the document."}],
+        }
+        assert sent_messages[1] == {
+            "role": "assistant",
+            "content": [
+                {"type": "tool_use", "id": "toolu_1", "name": "x", "input": {}}
+            ],
+        }
+        assert sent_messages[2] == {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_1",
+                    "content": "Comment created.",
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+        }
+
+    def test_does_not_mutate_the_caller_supplied_messages_list(
+        self, client: AnthropicClient, mock_create: Any
+    ) -> None:
+        """The caller's messages list and dicts are left untouched.
+
+        orchestrator.py keeps appending to the same list across rounds and
+        returns it as ``AgentRunResult.transcript`` -- mutating it here would
+        leak cache_control markers into that transcript.
+        """
+        mock_create.return_value = _fake_response([_fake_text_block("ok")])
+        original: list[dict[str, Any]] = [
+            {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+        ]
+
+        client.complete_chat(system="sys", messages=original, tools=[])
+
+        assert original == [
+            {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+        ]
+
+    def test_handles_an_empty_messages_list(
+        self, client: AnthropicClient, mock_create: Any
+    ) -> None:
+        """No breakpoint to place when there's no last message to place it on."""
+        mock_create.return_value = _fake_response([_fake_text_block("ok")])
+
+        client.complete_chat(system="sys", messages=[], tools=[])
+
+        assert mock_create.call_args.kwargs["messages"] == []
 
     def test_forwards_custom_max_tokens_to_the_sdk_call(
         self, client: AnthropicClient, mock_create: Any
