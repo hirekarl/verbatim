@@ -1,3 +1,9 @@
+## v0.16.2 (2026-07-18)
+
+### Fix
+
+- **docs-client**: refuse comments on spans a concurrent suggestion already rewrote
+
 ## v0.16.1 (2026-07-16)
 
 ### Fix
