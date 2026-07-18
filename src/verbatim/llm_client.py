@@ -130,11 +130,23 @@ class AnthropicClient:
         Raises:
             LLMClientError: The request failed.
         """
+        # Every round of an agent's tool-calling loop resends this same
+        # system prompt (brand guidelines + document, unchanged for the life
+        # of the loop) since the API is stateless -- marking it as an
+        # ephemeral cache breakpoint means round 2 onward reads it back at
+        # ~10% of input-token price instead of paying full price every round.
+        cacheable_system: list[dict[str, Any]] = [
+            {
+                "type": "text",
+                "text": system,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
         try:
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=max_tokens,
-                system=system,
+                system=cast(Any, cacheable_system),
                 messages=cast(Any, messages),
                 tools=cast(Any, tools),
                 # Disable extended thinking for reliable tool use

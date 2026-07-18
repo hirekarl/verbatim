@@ -152,11 +152,40 @@ class TestCompleteChat:
         mock_create.assert_called_once_with(
             model="claude-sonnet-5",
             max_tokens=4096,
-            system="You are Verbatim.",
+            system=[
+                {
+                    "type": "text",
+                    "text": "You are Verbatim.",
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=messages,
             tools=tools,
             thinking={"type": "disabled"},
         )
+
+    def test_marks_the_system_prompt_as_ephemeral_cacheable(
+        self, client: AnthropicClient, mock_create: Any
+    ) -> None:
+        """The system prompt gets a cache_control breakpoint.
+
+        Every round of an agent's tool-calling loop resends the same system
+        prompt (brand guidelines + document, unchanged for the life of the
+        loop) -- marking it cacheable means round 2 onward reads it back at
+        ~10% of input-token price instead of paying full price every round.
+        """
+        mock_create.return_value = _fake_response([_fake_text_block("ok")])
+
+        client.complete_chat(system="A" * 5000, messages=[], tools=[])
+
+        sent_system = mock_create.call_args.kwargs["system"]
+        assert sent_system == [
+            {
+                "type": "text",
+                "text": "A" * 5000,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
 
     def test_forwards_custom_max_tokens_to_the_sdk_call(
         self, client: AnthropicClient, mock_create: Any
@@ -167,7 +196,13 @@ class TestCompleteChat:
         mock_create.assert_called_once_with(
             model="claude-sonnet-5",
             max_tokens=1000,
-            system="",
+            system=[
+                {
+                    "type": "text",
+                    "text": "",
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=[],
             tools=[],
             thinking={"type": "disabled"},
