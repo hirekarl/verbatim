@@ -1,3 +1,9 @@
+## v0.16.3 (2026-07-18)
+
+### Perf
+
+- **llm-client**: prompt-cache the system prompt and conversation history (#87)
+
 ## v0.16.2 (2026-07-18)
 
 ### Fix
