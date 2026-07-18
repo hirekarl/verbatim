@@ -57,7 +57,7 @@ Each line is its own list item on purpose, same convention as last week's plan �
 
 **[Slide 4 — 1:30–2:00, Christina]**
 
-- CHRISTINA: "My half of this: I built the Structural agent from scratch, solo, against failing tests Karl wrote before he went out for a day — my first time in the agent code instead of the evaluator. By the back half of the week I was shipping fixes directly into files that used to be Karl- only — the orchestrator, the shared category validation, even the LLM client — because the split held up well enough to work across. The biggest one: the Line-Editor agent doesn't just read the evaluator's findings as context anymore, it transcribes them into real suggestions and comments. All seven categories reach the doc now, not four."
+- CHRISTINA: "My half: I built the Structural agent from scratch, solo — my first time in the agent code instead of the evaluator. By the back half of the week, I was shipping fixes across shared files — the orchestrator, category validation, the LLM client — since the split held up well across contributors. The biggest win: the Line-Editor agent now transcribes the evaluator's findings into real suggestions and comments, instead of just reading them as context. All seven categories now reach the doc, up from four."
 
 **[Slide 5 — 2:00–2:30, Christina]**
 
