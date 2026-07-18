@@ -14,6 +14,54 @@ DEFAULT_MODEL = "claude-sonnet-5"
 logger = logging.getLogger(__name__)
 
 
+def _render_message_content(
+    content: str | list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Render a message's content in the API's canonical block-list form.
+
+    A plain string is shorthand for a single text block. Normalizing every
+    message to the list form -- not just the ones that already use it --
+    keeps a given message's rendered bytes identical across rounds
+    regardless of which message currently holds the cache breakpoint (see
+    ``_with_cache_breakpoint``); a string one round and an equivalent block
+    list the next would look like a changed prefix and silently miss the
+    cache.
+    """
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}]
+    return [dict(block) for block in content]
+
+
+def _with_cache_breakpoint(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Copy ``messages`` with an ephemeral cache breakpoint on the newest block.
+
+    Each round of an agent's tool-calling loop resends the full conversation
+    so far -- the Messages API is stateless. Moving the single breakpoint to
+    the last block of the last message every round means round N reads back
+    everything through round N-1's tail from cache (the shared prefix
+    renders identically every time, per ``_render_message_content``) and
+    only pays full price for what's new since then -- the "Multi-turn
+    conversations" placement pattern from shared/prompt-caching.md. Returns a
+    copy rather than mutating in place: ``orchestrator._run_single_agent_loop``
+    keeps appending to and eventually returns this same list as
+    ``AgentRunResult.transcript``, so mutating it here would leak
+    cache_control markers into that transcript.
+    """
+    if not messages:
+        return []
+    rendered = [
+        {**message, "content": _render_message_content(message["content"])}
+        for message in messages
+    ]
+    last_content = rendered[-1]["content"]
+    if last_content:
+        last_content[-1] = {
+            **last_content[-1],
+            "cache_control": {"type": "ephemeral"},
+        }
+    return rendered
+
+
 def _ipv4_only_http_client() -> httpx.Client:
     """Build an httpx.Client that only ever binds to an IPv4 local address.
 
@@ -118,7 +166,9 @@ class AnthropicClient:
                 this as a top-level request parameter, not a message with
                 role "system" -- see orchestrator.py's message-building.
             messages: The conversation so far, in Anthropic Messages API
-                format (``role`` of "user"/"assistant" only).
+                format (``role`` of "user"/"assistant" only). Sent with an
+                ephemeral cache breakpoint on the newest message's last
+                block -- see ``_with_cache_breakpoint``.
             tools: The tool schemas the model may invoke, in Anthropic's flat
                 ``input_schema`` shape.
             max_tokens: The maximum number of tokens to generate. Defaults to
@@ -130,12 +180,25 @@ class AnthropicClient:
         Raises:
             LLMClientError: The request failed.
         """
+        # Every round of an agent's tool-calling loop resends this same
+        # system prompt (brand guidelines + document, unchanged for the life
+        # of the loop) since the API is stateless -- marking it as an
+        # ephemeral cache breakpoint means round 2 onward reads it back at
+        # ~10% of input-token price instead of paying full price every round.
+        cacheable_system: list[dict[str, Any]] = [
+            {
+                "type": "text",
+                "text": system,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+        cacheable_messages = _with_cache_breakpoint(messages)
         try:
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=max_tokens,
-                system=system,
-                messages=cast(Any, messages),
+                system=cast(Any, cacheable_system),
+                messages=cast(Any, cacheable_messages),
                 tools=cast(Any, tools),
                 # Disable extended thinking for reliable tool use
                 thinking={"type": "disabled"},
